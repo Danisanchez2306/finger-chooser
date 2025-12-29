@@ -14,6 +14,7 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
 #colorFill{position:fixed;inset:0;opacity:0;transition:opacity .22s;z-index:1;pointer-events:none;}
 #colorFill.on{opacity:1;}
 
+/* Top UI */
 #topbar{
   position:fixed;top:12px;left:12px;right:12px;z-index:10;
   display:flex;justify-content:space-between;align-items:flex-start;gap:12px;
@@ -37,7 +38,7 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
   -webkit-tap-highlight-color:transparent;
 }
 
-/* texto discreto abajo derecha + estado (siempre mismo color) */
+/* Texto discreto abajo derecha (y state centrado con mismo color) */
 #hint{
   position:fixed;right:10px;bottom:10px;font-size:11px;
   color:#000;opacity:.6;z-index:20;user-select:none;pointer-events:none;
@@ -83,7 +84,7 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
 .segBtn.active{ background:var(--accent); color:#fff; }
 
 /* =========================
-   DOT + AROS (vivos durante 4s)
+   DOT + AROS (quietos)
    ========================= */
 .dot{
   --c:#ff3b30;
@@ -97,11 +98,10 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
   transition:opacity .28s, transform .28s, filter .28s;
 }
 
-/* aro exterior */
+/* ARO exterior (quieto) */
 .dot::before{
   content:"";
-  position:absolute; inset:-16px;
-  border-radius:50%;
+  position:absolute; inset:-16px;border-radius:50%;
   background:conic-gradient(
     from 0deg,
     var(--c) 0 70deg,
@@ -112,14 +112,12 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
   -webkit-mask:radial-gradient(circle,transparent 60%,#000 61%);
   mask:radial-gradient(circle,transparent 60%,#000 61%);
   opacity:.92;
-  transform:rotate(0deg);
 }
 
-/* aro interior */
+/* ARO interior (quieto) */
 .dot::after{
   content:"";
-  position:absolute; inset:-8px;
-  border-radius:50%;
+  position:absolute; inset:-8px;border-radius:50%;
   background:conic-gradient(
     from 25deg,
     transparent 0 45deg,
@@ -131,28 +129,19 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
   -webkit-mask:radial-gradient(circle,transparent 68%,#000 69%);
   mask:radial-gradient(circle,transparent 68%,#000 69%);
   opacity:.62;
-  transform:rotate(0deg);
 }
 
-/* movimiento durante ronda */
-.dot.running::before{ animation:ringSpin .65s linear infinite, ringBreathe .9s ease-in-out infinite; }
-.dot.running::after { animation:ringSpinReverse .72s linear infinite, ringBreathe2 .95s ease-in-out infinite; }
-@keyframes ringSpin{ to{ transform:rotate(360deg); } }
-@keyframes ringSpinReverse{ to{ transform:rotate(-360deg); } }
-@keyframes ringBreathe{ 0%,100%{ filter:brightness(1); } 50%{ filter:brightness(1.12); } }
-@keyframes ringBreathe2{ 0%,100%{ opacity:.45; } 50%{ opacity:.75; } }
-
-/* perdedor: desaparece */
+/* Perdedor desaparece */
 .dot.lose{
   opacity:0;
   transform:translate(-50%,-50%) scale(.78);
   filter:blur(2px) brightness(.9);
 }
 
-/* GANADOR (como tu captura): donut negro + aro del color */
+/* Ganador: donut negro + borde color + pop */
 @keyframes winPop{
-  0%{transform:translate(-50%,-50%) scale(1.22)}
-  100%{transform:translate(-50%,-50%) scale(1.06)}
+  0%{transform:translate(-50%,-50%) scale(1.18)}
+  100%{transform:translate(-50%,-50%) scale(1.05)}
 }
 .dot.win{
   background:#000 !important;
@@ -160,16 +149,14 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
   opacity:1;
   animation:winPop .22s ease-out forwards;
 }
-/* quitamos la animación “running” y dejamos aro visible */
-.dot.win::before{ opacity:1; animation:none !important; }
 .dot.win::after{
   opacity:1;
-  animation:none !important;
   -webkit-mask:none; mask:none;
   background:transparent;
   inset:0;border-radius:50%;
   box-shadow: inset 0 0 0 10px var(--c), inset 0 0 0 18px #000;
 }
+.dot.win::before{ opacity:1; }
 </style>
 </head>
 
@@ -223,16 +210,19 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
   const FILL_MS = 5000;
   const COLORS = ["#ff3b30","#ff9500","#ffcc00","#34c759","#00c7be","#007aff","#5856d6","#af52de","#ff2d55","#ff6f00"];
 
-  let selectorValue = 1;
-  let mode = "fingers"; // fingers|groups
+  let selectorValue = 1;      // 1–4
+  let mode = "fingers";       // fingers | groups
 
-  // id -> {x,y,taps,color,path:[],eightLocked,wLocked}
-  const fingers = new Map();
-  const dots = new Map();
+  const fingers = new Map();  // id -> {x,y,color,taps,path,eightLocked,wLocked}
+  const dots = new Map();     // id -> element
 
-  let state = "waiting";
+  let state = "waiting";      // waiting | running | winnerFreeze
   let timer = null;
   let lastCount = 0;
+
+  // En modo winnerFreeze, solo se dibujan estos
+  let winnersVisible = new Set();
+  let winnerColor = "#000";
 
   const rand = n => Math.floor(Math.random()*n);
   const shuffle = a => { a=a.slice(); for(let i=a.length-1;i;i--){ const j=rand(i+1); [a[i],a[j]]=[a[j],a[i]]; } return a; };
@@ -281,14 +271,39 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
   }
 
   function renderLive(){
+    // En modo winnerFreeze: SOLO GANADORES (y si hay otros dedos tocando, no salen)
+    if(state === "winnerFreeze"){
+      for(const [id,f] of fingers){
+        if(!winnersVisible.has(id)){
+          removeDot(id);
+          continue;
+        }
+        const el = ensureDot(id);
+        el.style.left = f.x+"px";
+        el.style.top  = f.y+"px";
+        el.style.setProperty("--c", f.color || winnerColor);
+        el.style.background = f.color || winnerColor;
+        el.classList.remove("lose");
+        el.classList.add("win");
+      }
+      // limpia cualquier dot fantasma
+      for(const [id] of dots){
+        if(!winnersVisible.has(id)) removeDot(id);
+      }
+      return;
+    }
+
+    // Normal: dibuja a todos
     for(const [id,f] of fingers){
       const el = ensureDot(id);
       el.style.left = f.x+"px";
       el.style.top  = f.y+"px";
       el.style.setProperty("--c", f.color || COLORS[0]);
       el.style.background = f.color || COLORS[0];
-      el.classList.toggle("running", state==="running");
-      // no tocar win/lose aquí
+      el.classList.remove("win","lose");
+    }
+    for(const [id] of dots){
+      if(!fingers.has(id)) removeDot(id);
     }
   }
 
@@ -312,15 +327,8 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
     }
 
     ensureUniqueColorsStable();
-
-    // asegura que todos estén visibles y animando
-    for(const [id] of fingers){
-      const el = ensureDot(id);
-      el.classList.remove("win","lose");
-      el.classList.add("running");
-    }
-
     renderLive();
+
     clearTimeout(timer);
     timer = setTimeout(endRound, ROUND_MS);
   }
@@ -397,16 +405,11 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
     return groups;
   }
 
-  function setFillFromColors(colors){
-    if(colors.length<=1) colorFill.style.background = colors[0] || "black";
-    else{
-      const stops = colors.map((c,i)=>`${c} ${Math.round(i/(colors.length-1)*100)}%`).join(", ");
-      colorFill.style.background = `linear-gradient(135deg, ${stops})`;
-    }
+  function setFillSolid(color){
+    colorFill.style.background = color || "#000";
   }
 
   function endRound(){
-    state = "fin";
     stateEl.textContent = "fin";
 
     const entries = [...fingers.entries()];
@@ -422,6 +425,7 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
 
     if(mode==="fingers"){
       const wanted = selectorValue;
+
       if(eights.length) winners = pickWinners(eights, wanted);
       else if(sevens.length) winners = pickWinners(sevens, wanted);
       else{
@@ -436,9 +440,7 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
       const groups = assignGroups(pool, groupCount);
       let winnerGroupIndex = rand(groups.length);
 
-      const target8 = eights.find(id=>pool.includes(id));
-      const target7 = sevens.find(id=>pool.includes(id));
-      const target = target8 || target7;
+      const target = eights.find(id=>pool.includes(id)) || sevens.find(id=>pool.includes(id));
       if(target){
         for(let i=0;i<groups.length;i++){
           if(groups[i].includes(target)){ winnerGroupIndex=i; break; }
@@ -447,64 +449,55 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
       winners = groups[winnerGroupIndex].slice();
     }
 
-    const winSet = new Set(winners);
+    // 👇 A PARTIR DE AQUÍ: SOLO SE VE EL GANADOR (aunque otros dedos sigan tocando)
+    winnersVisible = new Set(winners);
 
-    // 1) Perdedor: animación de irse y luego borrarlo del DOM
-    for(const [id] of fingers){
-      const el = dots.get(id);
-      if(!el) continue;
-      el.classList.remove("running");
-      if(winSet.has(id)){
-        el.classList.add("win");
-        el.classList.remove("lose");
-      }else{
-        el.classList.add("lose");
-        el.classList.remove("win");
-      }
+    // Color del fondo: SOLO el color del primer ganador
+    winnerColor = (winners[0] && fingers.get(winners[0]) && fingers.get(winners[0]).color) ? fingers.get(winners[0]).color : "#000";
+    setFillSolid(winnerColor);
+    colorFill.classList.add("on");
+    setHintColorWhenFill(true, winnerColor);
+
+    // Forzar modo “winnerFreeze” y borrar todos los dots que no sean ganadores
+    state = "winnerFreeze";
+    for(const [id] of dots){
+      if(!winnersVisible.has(id)) removeDot(id);
     }
 
-    // 2) Fondo del color del ganador (o degradado si varios)
-    const winColors = winners.map(id=>fingers.get(id)?.color).filter(Boolean);
-    setFillFromColors(winColors);
-    colorFill.classList.add("on");
-    setHintColorWhenFill(true, winColors[0] || "#000");
+    // Aplicar estado visual ganador a los visibles
+    renderLive();
 
-    // 3) Después de un pelín, BORRAMOS los perdedores => solo queda el ganador en pantalla
-    setTimeout(() => {
-      for(const [id] of dots){
-        if(!winSet.has(id)) removeDot(id);
-      }
-    }, 260);
-
-    // 4) A los 5s se vuelve a negro y queda listo para siguiente ronda
     clearTimeout(timer);
     timer = setTimeout(() => {
+      // Vuelve a negro y vuelve a modo normal
       colorFill.classList.remove("on");
       setHintColorWhenFill(false);
 
       state = "waiting";
       stateEl.textContent = "esperando";
 
-      // deja el/los ganadores normales si siguen tocando
-      for(const [id] of fingers){
-        const el = dots.get(id);
-        if(el) el.classList.remove("win","lose","running");
-      }
+      winnersVisible = new Set();
+
+      // Cuando volvemos, si siguen dedos tocando, los redibujamos normales
       renderLive();
     }, FILL_MS);
   }
 
-  // ---- Touch logic (contador 4s se reinicia si entra o sale un dedo) ----
+  // ---- Touch logic ----
   zone.addEventListener("touchstart", e=>{
     e.preventDefault();
+
+    // si estamos mostrando el ganador, NO se dibuja nada nuevo (pero guardamos la posición por si sigues tocando)
     let changed=false;
 
     for(const t of e.changedTouches){
       const id = t.identifier;
+
       if(!fingers.has(id) && fingers.size < MAX){
         fingers.set(id,{x:t.clientX,y:t.clientY,taps:0,color:null,path:[],eightLocked:false,wLocked:false});
         changed=true;
       }
+
       const f = fingers.get(id);
       if(f){
         f.x=t.clientX; f.y=t.clientY;
@@ -512,15 +505,26 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
       }
     }
 
-    if(state==="waiting" && lastCount<2 && fingers.size>=2) startRound();
+    // Solo arrancamos ronda si NO estamos en winnerFreeze
+    if(state==="waiting" && lastCount<2 && fingers.size>=2){
+      startRound();
+    }
 
-    if(changed){
+    // reinicio del temporizador solo si estamos en running
+    if(changed && state==="running"){
       ensureUniqueColorsStable();
-      if(state==="running") restartRoundTimer();
+      restartRoundTimer();
     }
 
     lastCount=fingers.size;
-    if(state!=="fin") renderLive();
+
+    // Render: si winnerFreeze, solo ganador; si no, normal
+    if(state!=="winnerFreeze"){
+      ensureUniqueColorsStable();
+      renderLive();
+    }else{
+      renderLive();
+    }
   },{passive:false});
 
   zone.addEventListener("touchmove", e=>{
@@ -531,49 +535,47 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
       f.x=t.clientX; f.y=t.clientY;
       if(state==="running" && !(f.eightLocked || f.wLocked)) trackAndLockIfNeeded(f);
     }
-    renderLive();
+    renderLive(); // en winnerFreeze solo pinta ganador
   },{passive:false});
 
   zone.addEventListener("touchend", e=>{
     e.preventDefault();
     let changed=false;
-
     for(const t of e.changedTouches){
       if(fingers.has(t.identifier)){
         fingers.delete(t.identifier);
-        removeDot(t.identifier);
+        // Si winnerFreeze: aunque se vayan dedos, seguimos mostrando solo el ganador (si sigue)
+        // Si no winnerFreeze: quitamos su dot
+        if(state!=="winnerFreeze") removeDot(t.identifier);
         changed=true;
       }
     }
-
     lastCount=fingers.size;
 
     if(changed && state==="running"){
       ensureUniqueColorsStable();
       restartRoundTimer();
-      renderLive();
     }
+    renderLive();
   },{passive:false});
 
   zone.addEventListener("touchcancel", e=>{
     e.preventDefault();
     let changed=false;
-
     for(const t of e.changedTouches){
       if(fingers.has(t.identifier)){
         fingers.delete(t.identifier);
-        removeDot(t.identifier);
+        if(state!=="winnerFreeze") removeDot(t.identifier);
         changed=true;
       }
     }
-
     lastCount=fingers.size;
 
     if(changed && state==="running"){
       ensureUniqueColorsStable();
       restartRoundTimer();
-      renderLive();
     }
+    renderLive();
   },{passive:false});
 
   // ---- Modal UI ----
