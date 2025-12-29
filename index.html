@@ -7,7 +7,7 @@
   <title>Finger Chooser</title>
 
   <style>
-    html, body {
+    html, body{
       margin:0;
       height:100%;
       background:black;
@@ -16,15 +16,28 @@
       color:white;
     }
 
-    #zone {
+    #zone{
       height:100%;
       touch-action:none;
       user-select:none;
       -webkit-user-select:none;
     }
 
-    /* Barra superior */
-    #topbar {
+    /* Capa de fondo de color al final */
+    #colorFill{
+      position:fixed;
+      inset:0;
+      background:transparent;
+      opacity:0;
+      transition: opacity 180ms ease;
+      z-index:1;
+      pointer-events:none;
+    }
+    #colorFill.on{
+      opacity:1;
+    }
+
+    #topbar{
       position:fixed;
       top:12px;
       left:12px;
@@ -36,13 +49,13 @@
       gap:12px;
     }
 
-    #state {
+    #state{
       font-size:18px;
       opacity:0.95;
       text-transform: lowercase;
     }
 
-    #controls {
+    #controls{
       display:flex;
       align-items:center;
       gap:8px;
@@ -52,12 +65,12 @@
       backdrop-filter: blur(8px);
     }
 
-    #controls label {
+    #controls label{
       font-size:14px;
       opacity:0.9;
     }
 
-    #winnerCount {
+    #winnerCount{
       appearance:none;
       -webkit-appearance:none;
       border:1px solid rgba(255,255,255,.25);
@@ -69,54 +82,54 @@
       outline:none;
     }
 
-    /* 🔵 CÍRCULOS (MITAD DE TAMAÑO) */
-    .dot {
+    .dot{
       position:fixed;
-      width:130px;   /* antes 260 */
-      height:130px;  /* antes 260 */
+      width:130px;
+      height:130px;
       border-radius:50%;
       transform:translate(-50%,-50%);
       pointer-events:none;
       box-shadow:0 0 40px rgba(255,255,255,.25);
       z-index:5;
+      transition: opacity 160ms ease, transform 160ms ease;
+      opacity: 0.95;
     }
 
-    @keyframes pulse {
+    @keyframes pulse{
       0%   { transform:translate(-50%,-50%) scale(0.92); }
       100% { transform:translate(-50%,-50%) scale(1.08); }
     }
-
-    @keyframes jitter {
+    @keyframes jitter{
       0% { margin:0 }
       25% { margin-left:3px }
       50% { margin-top:3px }
       75% { margin-left:-3px }
       100% { margin:0 }
     }
-
-    .dot.running {
+    .dot.running{
       animation:
         pulse 520ms ease-in-out infinite alternate,
         jitter 130ms linear infinite;
     }
 
-    /* Ganadores */
-    .dot.win {
+    .dot.win{
       outline:8px solid white;
       animation:none;
       box-shadow:0 0 70px rgba(255,255,255,.6);
       opacity:1;
     }
 
-    /* No ganadores */
-    .dot.dim {
-      opacity:0.35;
+    .dot.dim{
+      opacity:0;
+      transform:translate(-50%,-50%) scale(0.7);
       animation:none;
     }
   </style>
 </head>
 
 <body>
+  <div id="colorFill"></div>
+
   <div id="topbar">
     <div id="state">esperando</div>
 
@@ -137,16 +150,18 @@
 const zone = document.getElementById("zone");
 const stateEl = document.getElementById("state");
 const winnerCountEl = document.getElementById("winnerCount");
+const colorFill = document.getElementById("colorFill");
 
 const MAX = 5;
 const ROUND = 4000;
+const FILL_MS = 5000;
 
 const COLORS = [
   "#ff3b30", "#ff9500", "#ffcc00", "#34c759", "#00c7be",
   "#007aff", "#5856d6", "#af52de", "#ff2d55", "#ff6f00"
 ];
 
-const fingers = new Map();
+const fingers = new Map(); // id -> {x,y,taps,color}
 let state = "waiting";
 let timer = null;
 let lastCount = 0;
@@ -162,22 +177,42 @@ function shuffled(arr){
   return a;
 }
 
-function render(winSet=null){
+/* Vibración (iPhone: funciona en algunos casos; si no, no pasa nada) */
+function vibrate(pattern){
+  try{
+    if (navigator.vibrate) navigator.vibrate(pattern);
+  }catch(_){}
+}
+
+function assignUniqueColors(){
+  // Colores únicos para todos los dedos actuales (<=5)
+  const colors = shuffled(COLORS);
+  const ids = [...fingers.keys()];
+  for(let i=0;i<ids.length;i++){
+    fingers.get(ids[i]).color = colors[i]; // único
+  }
+}
+
+function render(winSet=null, hideNonWinners=false){
   document.querySelectorAll(".dot").forEach(d=>d.remove());
 
   for(const [id,f] of fingers){
-    const d=document.createElement("div");
-    d.className="dot";
+    // Si al final queremos esconder no-ganadores, no los dibujamos
+    if(hideNonWinners && winSet && !winSet.has(id)) continue;
+
+    const d = document.createElement("div");
+    d.className = "dot";
 
     if(state==="running") d.classList.add("running");
+
     if(winSet){
       if(winSet.has(id)) d.classList.add("win");
-      else d.classList.add("dim");
+      else d.classList.add("dim"); // si no se ocultan, se apagan (pero aquí luego los ocultamos)
     }
 
-    d.style.left=f.x+"px";
-    d.style.top=f.y+"px";
-    d.style.background=f.color;
+    d.style.left = f.x + "px";
+    d.style.top  = f.y + "px";
+    d.style.background = f.color;
 
     document.body.appendChild(d);
   }
@@ -189,13 +224,11 @@ function start(){
   state="running";
   stateEl.textContent="jugando";
 
-  const colors = shuffled(COLORS);
-  [...fingers.values()].forEach((f,i)=>{
-    f.taps = 0;
-    f.color = colors[i];
-  });
+  // reset taps y asignar colores únicos (sin repetir)
+  for(const f of fingers.values()) f.taps = 0;
+  assignUniqueColors();
 
-  render();
+  render(null,false);
   clearTimeout(timer);
   timer = setTimeout(end, ROUND);
 }
@@ -204,7 +237,6 @@ function pickWinners(ids, k){
   const pool = ids.slice();
   const out = [];
   const want = Math.min(k, pool.length);
-
   for(let i=0;i<want;i++){
     const idx = randomIndex(pool.length);
     out.push(pool[idx]);
@@ -239,29 +271,50 @@ function end(){
     }
   }
 
-  render(new Set(winners));
+  const winSet = new Set(winners);
 
-  setTimeout(()=>{
+  // 1) Vibración al decidir
+  vibrate([60, 40, 60]);
+
+  // 2) Mostrar SOLO ganadores (no ganadores desaparecen)
+  render(winSet, true);
+
+  // 3) Fondo se cubre con el color del primer ganador (si hay)
+  let fillColor = "#000000";
+  if(winners.length > 0 && fingers.has(winners[0])){
+    fillColor = fingers.get(winners[0]).color;
+  }
+  colorFill.style.background = fillColor;
+  colorFill.classList.add("on");
+
+  // 4) Mantener 5 segundos y volver a esperar
+  clearTimeout(timer);
+  timer = setTimeout(()=>{
+    colorFill.classList.remove("on");
     state="waiting";
     stateEl.textContent="esperando";
-    render(null);
-  },1200);
+    render(null,false);
+  }, FILL_MS);
 }
 
+// Tap = touchstart durante la ronda
 zone.addEventListener("touchstart", e=>{
   e.preventDefault();
 
   for(const t of e.changedTouches){
     const id = t.identifier;
 
+    // admitir dedo nuevo si hay hueco
     if(!fingers.has(id) && fingers.size < MAX){
       fingers.set(id, { x:t.clientX, y:t.clientY, taps:0, color: COLORS[0] });
     }
 
-    if(state==="running" && fingers.has(id)){
+    // cuenta tap solo si está admitido
+    if(state === "running" && fingers.has(id)){
       fingers.get(id).taps++;
     }
 
+    // actualiza posición si está admitido
     if(fingers.has(id)){
       const f = fingers.get(id);
       f.x = t.clientX;
@@ -269,36 +322,50 @@ zone.addEventListener("touchstart", e=>{
     }
   }
 
-  if(lastCount < 2 && fingers.size >= 2) start();
+  // Arranca cuando pasa de <2 a >=2 dedos admitidos
+  if(state === "waiting" && lastCount < 2 && fingers.size >= 2){
+    start();
+  }
+
   lastCount = fingers.size;
-  render(null);
+
+  // durante fin, no redibujar todo (para que no reaparezcan no-ganadores)
+  if(state !== "fin") render(null,false);
 },{passive:false});
 
 zone.addEventListener("touchmove", e=>{
   e.preventDefault();
+  if(state === "fin") return;
   for(const t of e.changedTouches){
     const f = fingers.get(t.identifier);
     if(f){ f.x = t.clientX; f.y = t.clientY; }
   }
-  render(null);
+  render(null,false);
 },{passive:false});
 
 zone.addEventListener("touchend", e=>{
   e.preventDefault();
-  for(const t of e.changedTouches) fingers.delete(t.identifier);
+
+  // durante fin, dejamos los ganadores visibles y el fondo cubierto
+  for(const t of e.changedTouches){
+    fingers.delete(t.identifier);
+  }
   lastCount = fingers.size;
-  render(null);
+
+  if(state !== "fin") render(null,false);
 },{passive:false});
 
 zone.addEventListener("touchcancel", e=>{
   e.preventDefault();
-  for(const t of e.changedTouches) fingers.delete(t.identifier);
+  for(const t of e.changedTouches){
+    fingers.delete(t.identifier);
+  }
   lastCount = fingers.size;
-  render(null);
+  if(state !== "fin") render(null,false);
 },{passive:false});
 
-stateEl.textContent="esperando";
-render(null);
+stateEl.textContent = "esperando";
+render(null,false);
 </script>
 </body>
 </html>
