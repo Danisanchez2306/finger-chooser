@@ -109,11 +109,13 @@ html, body{
   const stateEl = document.getElementById("state");
   const winnerCountEl = document.getElementById("winnerCount");
   const colorFill = document.getElementById("colorFill");
+  const hintEl = document.getElementById("hint");
 
   const MAX=5, ROUND_MS=4000, FILL_MS=5000;
   const COLORS=["#ff3b30","#ff9500","#ffcc00","#34c759","#00c7be","#007aff","#5856d6","#af52de","#ff2d55","#ff6f00"];
 
-  const fingers=new Map(); // id -> {x,y,taps,color,path:[]}
+  // id -> {x,y,taps,color,path:[], eightLocked:boolean}
+  const fingers=new Map();
   const dotEls=new Map();
   let state="waiting", timer=null, lastCount=0;
 
@@ -127,10 +129,19 @@ html, body{
   };
   const removeDot=id=>{ if(dotEls.has(id)){dotEls.get(id).remove(); dotEls.delete(id)} };
 
-  function ensureUniqueColors(){
-    const ids=[...fingers.keys()];
-    const cols=shuffle(COLORS).slice(0,ids.length);
-    ids.forEach((id,i)=>fingers.get(id).color=cols[i]);
+  // ✅ Mantiene colores ya asignados y solo asigna a dedos nuevos (sin repetir)
+  function ensureUniqueColorsStable(){
+    const used = new Set();
+    for (const f of fingers.values()){
+      if (f.color) used.add(f.color);
+    }
+    const available = shuffle(COLORS.filter(c => !used.has(c)));
+    for (const f of fingers.values()){
+      if (!f.color){
+        f.color = available.length ? available.pop() : COLORS[rand(COLORS.length)];
+        used.add(f.color);
+      }
+    }
   }
 
   function renderLive(){
@@ -154,44 +165,22 @@ html, body{
   function startRound(){
     if(fingers.size<2) return;
     state="running"; stateEl.textContent="jugando";
-    for(const f of fingers.values()){ f.taps=0; f.path=[]; }
-    ensureUniqueColors(); renderLive();
+
+    // OJO: NO reiniciamos color ni eightLocked de quien ya exista
+    for(const f of fingers.values()){
+      f.taps = 0;
+      f.path = [];
+      f.eightLocked = false;
+    }
+
+    ensureUniqueColorsStable();
+    renderLive();
+
     clearTimeout(timer);
     timer=setTimeout(endRound,ROUND_MS);
   }
 
-  // --- Detección de 8 (no muy estricta) ---
-  function isEight(path){
-    if(path.length < 14) return false;
-
-    let minX=Infinity,maxX=-Infinity,minY=Infinity,maxY=-Infinity;
-    for(const p of path){
-      minX=Math.min(minX,p.x); maxX=Math.max(maxX,p.x);
-      minY=Math.min(minY,p.y); maxY=Math.max(maxY,p.y);
-    }
-    const w=maxX-minX, h=maxY-minY;
-    if(Math.max(w,h) < 70) return false; // evita micro-garabatos
-
-    // Muchos cambios de dirección (dos bucles)
-    let turns=0;
-    for(let i=2;i<path.length;i++){
-      const aY = path[i-2].y - path[i-1].y;
-      const bY = path[i-1].y - path[i].y;
-      if(aY*bY < 0) turns++;
-    }
-    if(turns < 6) return false;
-
-    // Cruce cerca del centro (intersección del 8)
-    const cx=(minX+maxX)/2, cy=(minY+maxY)/2;
-    let crosses=0;
-    for(const p of path){
-      if(Math.hypot(p.x-cx,p.y-cy) < Math.min(w,h)*0.12) crosses++;
-    }
-    if(crosses < 2) return false;
-
-    return true;
-  }
-
+  // --- Detección W (vetar) ---
   function isW(path){
     if(path.length < 10) return false;
     let changes=0;
@@ -201,6 +190,40 @@ html, body{
       if(a*b < 0) changes++;
     }
     return changes >= 4;
+  }
+
+  // --- Detección 8 (no muy estricta) ---
+  function isEight(path){
+    if(path.length < 14) return false;
+
+    let minX=Infinity,maxX=-Infinity,minY=Infinity,maxY=-Infinity;
+    for(const p of path){
+      minX=Math.min(minX,p.x); maxX=Math.max(maxX,p.x);
+      minY=Math.min(minY,p.y); maxY=Math.max(maxY,p.y);
+    }
+    const w=maxX-minX, h=maxY-minY;
+    const size=Math.max(w,h);
+    if(size < 70) return false;
+
+    // cambios verticales (zigzag de los dos bucles)
+    let turns=0;
+    for(let i=2;i<path.length;i++){
+      const aY = path[i-2].y - path[i-1].y;
+      const bY = path[i-1].y - path[i].y;
+      if(aY*bY < 0) turns++;
+    }
+    if(turns < 6) return false;
+
+    // cruce cerca del centro
+    const cx=(minX+maxX)/2, cy=(minY+maxY)/2;
+    let crosses=0;
+    const r = Math.min(w,h) * 0.14;
+    for(const p of path){
+      if(Math.hypot(p.x-cx,p.y-cy) < r) crosses++;
+    }
+    if(crosses < 2) return false;
+
+    return true;
   }
 
   function pickWinners(ids,k){
@@ -221,15 +244,29 @@ html, body{
     }
   }
 
+  function setHintColorWhenFill(on, color){
+    if(on){
+      hintEl.style.color = color || "#000";
+    }else{
+      hintEl.style.color = "#000";
+    }
+  }
+
   function endRound(){
     state="fin"; stateEl.textContent="fin";
     const wanted = (+winnerCountEl.value || 1);
     const entries=[...fingers.entries()];
 
-    const eights = entries.filter(([_,f])=>isEight(f.path)).map(([id])=>id);
+    // 8 bloqueado (prioridad)
+    const eights = entries.filter(([_,f])=>f.eightLocked === true).map(([id])=>id);
+
+    // 7/9
     const sevens = entries.filter(([_,f])=>f.taps===7).map(([id])=>id);
-    const bannedW= entries.filter(([_,f])=>isW(f.path)).map(([id])=>id);
     const banned9= entries.filter(([_,f])=>f.taps===9).map(([id])=>id);
+
+    // W por dibujo (si no está bloqueado como 8, porque un 8 podría tener zigzags raros)
+    const bannedW= entries.filter(([_,f])=>!f.eightLocked && isW(f.path)).map(([id])=>id);
+
     const banned = new Set([...bannedW, ...banned9]);
 
     let winners=[];
@@ -256,12 +293,18 @@ html, body{
     setFillFromColors(winColors);
     colorFill.classList.add("on");
 
+    // Texto: mismo color que el fondo (usamos el primer ganador)
+    setHintColorWhenFill(true, winColors[0] || "#000");
+
     clearTimeout(timer);
     timer=setTimeout(()=>{
       colorFill.classList.remove("on");
+      setHintColorWhenFill(false);
+
       for(const [id] of dotEls){
         if(!winSet.has(id)) removeDot(id);
       }
+
       state="waiting"; stateEl.textContent="esperando";
       for(const [id] of fingers){
         const el=dotEls.get(id);
@@ -280,24 +323,38 @@ html, body{
       const id=t.identifier;
 
       if(!fingers.has(id) && fingers.size < MAX){
-        fingers.set(id, {x:t.clientX, y:t.clientY, taps:0, color:null, path:[]});
+        fingers.set(id, {x:t.clientX, y:t.clientY, taps:0, color:null, path:[], eightLocked:false});
         changed=true;
       }
 
       const f=fingers.get(id);
       if(f){
         f.x=t.clientX; f.y=t.clientY;
+
         if(state==="running"){
           f.taps++;
-          f.path.push({x:f.x,y:f.y});
+
+          // ✅ si ya bloqueó el 8, no seguimos grabando
+          if(!f.eightLocked){
+            f.path.push({x:f.x,y:f.y});
+
+            // ✅ en cuanto se detecta el 8, se BLOQUEA y ya no se degrada
+            if(isEight(f.path)){
+              f.eightLocked = true;
+              // recortamos para que no siga creciendo
+              f.path = f.path.slice(-60);
+            }
+          }
         }
       }
     }
 
+    // empieza al llegar a 2 dedos
     if(state==="waiting" && lastCount<2 && fingers.size>=2) startRound();
 
+    // si entra alguien nuevo durante running: no resetea tu 8, solo reinicia timer (como antes)
     if(changed){
-      ensureUniqueColors();
+      ensureUniqueColorsStable();
       if(state==="running") restartRoundTimer();
     }
 
@@ -311,9 +368,19 @@ html, body{
 
     for(const t of e.changedTouches){
       const f=fingers.get(t.identifier);
-      if(f){
-        f.x=t.clientX; f.y=t.clientY;
-        f.path.push({x:f.x, y:f.y});
+      if(!f) continue;
+
+      f.x=t.clientX; f.y=t.clientY;
+
+      // ✅ si ya bloqueó 8, ignorar movimiento
+      if(f.eightLocked) continue;
+
+      f.path.push({x:f.x, y:f.y});
+
+      // ✅ detectar y bloquear 8 “en vivo”
+      if(isEight(f.path)){
+        f.eightLocked = true;
+        f.path = f.path.slice(-60);
       }
     }
     renderLive();
@@ -326,9 +393,16 @@ html, body{
     for(const t of e.changedTouches){
       if(fingers.has(t.identifier)){
         const f=fingers.get(t.identifier);
-        if(state==="running" && f && f.path){
+
+        // ✅ punto final solo si no estaba bloqueado (si estaba bloqueado, da igual)
+        if(state==="running" && f && !f.eightLocked){
           f.path.push({x:f.x, y:f.y});
+          if(isEight(f.path)){
+            f.eightLocked = true;
+            f.path = f.path.slice(-60);
+          }
         }
+
         fingers.delete(t.identifier);
         removeDot(t.identifier);
         changed=true;
@@ -338,7 +412,7 @@ html, body{
     lastCount=fingers.size;
 
     if(changed && state==="running"){
-      ensureUniqueColors();
+      ensureUniqueColorsStable();
       restartRoundTimer();
       renderLive();
     }
@@ -351,9 +425,14 @@ html, body{
     for(const t of e.changedTouches){
       if(fingers.has(t.identifier)){
         const f=fingers.get(t.identifier);
-        if(state==="running" && f && f.path){
+        if(state==="running" && f && !f.eightLocked){
           f.path.push({x:f.x, y:f.y});
+          if(isEight(f.path)){
+            f.eightLocked = true;
+            f.path = f.path.slice(-60);
+          }
         }
+
         fingers.delete(t.identifier);
         removeDot(t.identifier);
         changed=true;
@@ -363,7 +442,7 @@ html, body{
     lastCount=fingers.size;
 
     if(changed && state==="running"){
-      ensureUniqueColors();
+      ensureUniqueColorsStable();
       restartRoundTimer();
       renderLive();
     }
@@ -371,7 +450,7 @@ html, body{
 
   // init
   stateEl.textContent="esperando";
-  ensureUniqueColors();
+  ensureUniqueColorsStable();
   renderLive();
 })();
 </script>
