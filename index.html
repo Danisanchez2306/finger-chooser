@@ -26,15 +26,15 @@ html, body{
   display:flex;justify-content:space-between;align-items:flex-start;gap:12px;
 }
 
-/* Texto estado (se camufla igual que el hint) */
+/* Texto estado (mismo color que hint) */
 #state{
   position:fixed;left:50%;top:16px;transform:translateX(-50%);
   font-size:13px;opacity:.55;text-transform:lowercase;z-index:10;
   pointer-events:none;
-  color:#000; /* se sincroniza con hint */
+  color:#000;
 }
 
-/* Botón circular arriba-izquierda (1F) */
+/* Botón circular arriba-izquierda */
 #winBtn{
   width:76px;height:76px;border-radius:50%;
   background:var(--green);
@@ -45,7 +45,7 @@ html, body{
   -webkit-tap-highlight-color: transparent;
 }
 
-/* Botón ? arriba-derecha */
+/* Botón ? */
 #helpBtn{
   width:76px;height:76px;border-radius:50%;
   background:#ff00a8;
@@ -121,7 +121,7 @@ html, body{
 }
 
 /* =========================
-   DOT + RINGS (como el vídeo)
+   DOT + RINGS (circle perfecto)
    ========================= */
 .dot{
   --c:#ff3b30;
@@ -132,51 +132,46 @@ html, body{
   transition:opacity .26s, transform .26s, filter .26s;
 }
 
-/* el relleno del círculo */
 .dot .fill{
   position:absolute;inset:0;border-radius:50%;
   background:var(--c);
 }
 
-/* contenedor del aro */
+/* contenedor de aros */
 .dot .rings{
   position:absolute;
-  inset:-18px; /* hace que el aro quede fuera */
+  inset:-18px;
   width:calc(100% + 36px);
   height:calc(100% + 36px);
   pointer-events:none;
   transform:rotate(0deg);
 }
 
-/* estilo de los arcos */
+/* círculos perfectos */
 .dot .arc{
   fill:none;
   stroke:var(--c);
-  stroke-width:10;
   stroke-linecap:butt;
-  stroke-dasharray:100;
-  stroke-dashoffset:100; /* oculto hasta “dibujar” */
-  opacity:.95;
-}
-.dot .arc.inner{
-  stroke-width:8;
-  opacity:.60;
+  vector-effect: non-scaling-stroke;
+  shape-rendering: geometricPrecision;
+  transform-origin:50% 50%;
 }
 
-/* animación de “dibujar el aro” al tocar */
-.dot.reveal .arc.outer{
-  animation:drawArc 180ms ease-out forwards;
-}
-.dot.reveal .arc.inner{
-  animation:drawArc 220ms ease-out 50ms forwards;
-}
-@keyframes drawArc{
-  to{ stroke-dashoffset:0; }
-}
+/* Grosor fijo (NO engorda) */
+.dot .arc.outer{ stroke-width:12; opacity:.95; stroke-dasharray:0 100; }
+.dot .arc.inner{ stroke-width:8;  opacity:.60; stroke-dasharray:0 100; }
 
-/* durante la espera: rotación y “respiración” */
+/* “dibujar aro” — dura 1,2 segundos */
+.dot.reveal .arc.outer{ animation:drawArcOuter 1.2s ease-out forwards; }
+.dot.reveal .arc.inner{ animation:drawArcInner 1.2s ease-out forwards; }
+
+@keyframes drawArcOuter{ to{ stroke-dasharray:58 42; } }
+@keyframes drawArcInner{ to{ stroke-dasharray:46 54; } }
+
+/* Durante espera: girar */
 .dot.running .rings{
   animation:spin 650ms linear infinite, breathe 900ms ease-in-out infinite;
+  will-change: transform, filter;
 }
 @keyframes spin{ to{ transform:rotate(360deg); } }
 @keyframes breathe{
@@ -191,34 +186,19 @@ html, body{
   filter:blur(2px) brightness(.9);
 }
 
-/* Ganador: donut negro + anillo fijo (como tu captura) */
+/* Ganador: donut negro + aro fijo */
 @keyframes winPop{
   0%{ transform:translate(-50%,-50%) scale(1.18); }
   100%{ transform:translate(-50%,-50%) scale(1.05); }
 }
-.dot.win{
-  animation:winPop .22s ease-out forwards;
-}
+.dot.win{ animation:winPop .22s ease-out forwards; }
+.dot.win .fill{ background:#000 !important; }
 
-/* al ganar, el relleno pasa a negro */
-.dot.win .fill{
-  background:#000 !important;
-}
+/* Aro completo visible al ganar */
+.dot.win .arc.outer{ stroke-dasharray:90 10 !important; opacity:1; }
+.dot.win .arc.inner{ stroke-dasharray:80 20 !important; opacity:1; }
 
-/* al ganar, queremos aro más “completo”, sin dibujo: dejamos dashoffset 0 */
-.dot.win .arc{
-  stroke-dashoffset:0 !important;
-  opacity:1;
-}
-.dot.win .arc.inner{
-  opacity:1;
-}
-
-/* para parecer más al winner de tu captura: hacemos el aro exterior más grueso */
-.dot.win .arc.outer{ stroke-width:12; }
-.dot.win .arc.inner{ stroke-width:8; }
-
-/* halo discreto */
+/* Un poco más lento al girar el ganador */
 .dot.win .rings{
   animation:spin 900ms linear infinite;
   filter:drop-shadow(0 0 2px rgba(0,0,0,.35));
@@ -271,7 +251,6 @@ html, body{
   const segGroups = document.getElementById("segGroups");
   const modal = document.getElementById("modal");
 
-  // Accent dinámico del modal
   let mode = "fingers"; // "fingers" | "groups"
   function setAccent(){
     const accent = (mode === "groups")
@@ -283,9 +262,6 @@ html, body{
   const MAX=5, ROUND_MS=4000, FILL_MS=5000;
   const COLORS=["#ff3b30","#ff9500","#ffcc00","#34c759","#00c7be","#007aff","#5856d6","#af52de","#ff2d55","#ff6f00"];
 
-  // selectorValue:
-  // - fingers: nº ganadores
-  // - groups: nº grupos
   let selectorValue = 1;
 
   // id -> {x,y,taps,color,path:[], eightLocked:boolean, wLocked:boolean}
@@ -304,12 +280,8 @@ html, body{
     d.innerHTML = `
       <div class="fill"></div>
       <svg class="rings" viewBox="0 0 100 100" aria-hidden="true">
-        <!-- outer arc -->
-        <path class="arc outer" pathLength="100"
-          d="M 86 26 A 40 40 0 1 1 26 86" />
-        <!-- inner arc -->
-        <path class="arc inner" pathLength="100"
-          d="M 78 22 A 33 33 0 1 0 22 78" />
+        <circle class="arc outer" cx="50" cy="50" r="44" pathLength="100"></circle>
+        <circle class="arc inner" cx="50" cy="50" r="36" pathLength="100"></circle>
       </svg>
     `;
     document.body.appendChild(d);
@@ -339,7 +311,6 @@ html, body{
       el.style.left=f.x+"px"; el.style.top=f.y+"px";
       const c=f.color||COLORS[0];
       el.style.setProperty("--c",c);
-
       el.classList.toggle("running", state==="running");
       el.classList.remove("win","lose");
     }
@@ -360,7 +331,6 @@ html, body{
   }
 
   function setHintColorWhenFill(on, color){
-    // Mientras hay fill, texto del mismo color para que casi no se vea.
     setHiddenTextColor(on ? (color || "#000") : "#000");
   }
 
@@ -375,7 +345,6 @@ html, body{
     state="running";
     stateEl.textContent="jugando";
 
-    // no mantener 8/W entre rondas
     for(const f of fingers.values()){
       f.taps = 0;
       f.path = [];
@@ -390,7 +359,6 @@ html, body{
     timer=setTimeout(endRound,ROUND_MS);
   }
 
-  // 8 gana (no muy estricto)
   function isEight(path){
     if(path.length < 14) return false;
 
@@ -422,7 +390,6 @@ html, body{
     return true;
   }
 
-  // W pierde (no muy estricta)
   function isW(path){
     if(path.length < 10) return false;
 
@@ -444,12 +411,9 @@ html, body{
     return changes >= 3;
   }
 
-  // Track + lock (8/W se bloquean al detectarlos)
   function trackAndLockIfNeeded(f){
     if(!f || f.eightLocked || f.wLocked) return;
-
     f.path.push({x:f.x,y:f.y});
-
     if(isEight(f.path)){
       f.eightLocked = true;
       f.wLocked = false;
@@ -542,14 +506,12 @@ html, body{
 
     const winSet=new Set(survivors);
 
-    // animación final: gana/ pierde
     for(const [id] of fingers){
       const el=dotEls.get(id);
       if(!el) continue;
       el.classList.remove("running");
       el.classList.add(winSet.has(id) ? "win" : "lose");
-      // asegurar que el aro esté visible al final
-      el.classList.add("reveal");
+      el.classList.add("reveal"); // aro visible sí o sí
     }
 
     const winColors=survivors.map(id=>fingers.get(id)?.color).filter(Boolean);
@@ -596,9 +558,9 @@ html, body{
 
         const el = ensureDot(id);
 
-        // ✅ animación: el aro “se dibuja” al tocar
-        el.classList.remove("reveal"); // retrigger limpio
-        void el.offsetWidth;           // force reflow para que se vea el retrigger
+        // retrigger del “dibujar aro”
+        el.classList.remove("reveal");
+        void el.offsetWidth;
         el.classList.add("reveal");
 
         if(state==="running"){
@@ -733,7 +695,7 @@ html, body{
   updateUI();
 
   stateEl.textContent="esperando";
-  setHintColorWhenFill(false); // negro sobre negro (solo lo ven los vivos)
+  setHintColorWhenFill(false); // negro sobre negro
   ensureUniqueColorsStable();
   renderLive();
 })();
