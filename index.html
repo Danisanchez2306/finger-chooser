@@ -7,50 +7,86 @@
   <title>Finger Chooser</title>
 
   <style>
-    html, body { margin:0; height:100%; font-family:-apple-system,system-ui,sans-serif; }
-    #zone { height:100%; touch-action:none; user-select:none; -webkit-user-select:none; }
+    html, body {
+      margin:0;
+      height:100%;
+      background:black; /* ✅ fondo negro */
+      font-family:-apple-system,system-ui,sans-serif;
+      overflow:hidden;
+    }
+
+    #zone {
+      height:100%;
+      touch-action:none;
+      user-select:none;
+      -webkit-user-select:none;
+    }
 
     #hud {
-      position:fixed; top:12px; left:12px; right:12px;
-      background:rgba(0,0,0,.65); color:#fff; padding:10px 12px; border-radius:14px;
-      backdrop-filter: blur(8px);
-      display:flex; justify-content:space-between; align-items:center;
-      gap:12px; z-index: 10;
+      position:fixed;
+      top:12px;
+      left:12px;
+      right:12px;
+      color:white;
+      text-align:center;
+      z-index:10;
+      font-size:18px;
     }
 
     #msg {
-      position:fixed; bottom:18px; left:18px; right:18px;
-      background:rgba(0,0,0,.75); color:#fff; padding:12px 14px; border-radius:16px;
-      text-align:center; display:none; z-index: 10;
+      position:fixed;
+      bottom:20px;
+      left:20px;
+      right:20px;
+      background:rgba(255,255,255,.1);
+      color:white;
+      padding:14px;
+      border-radius:18px;
+      text-align:center;
+      display:none;
+      z-index:10;
     }
 
+    /* 🔵 CÍRCULOS x5 */
     .dot {
       position:fixed;
-      width:52px; height:52px; border-radius:999px;
+      width:260px;   /* 52 x 5 */
+      height:260px;  /* 52 x 5 */
+      border-radius:50%;
       transform:translate(-50%,-50%);
       pointer-events:none;
-      box-shadow:0 10px 22px rgba(0,0,0,.16);
-      opacity: 0.92; z-index: 5;
+      box-shadow:0 0 60px rgba(255,255,255,.25);
+      z-index:5;
     }
 
     @keyframes pulse {
-      0% { transform: translate(-50%,-50%) scale(0.95); }
-      100% { transform: translate(-50%,-50%) scale(1.08); }
+      0%   { transform:translate(-50%,-50%) scale(0.92); }
+      100% { transform:translate(-50%,-50%) scale(1.08); }
     }
+
     @keyframes jitter {
-      0% { margin:0 } 50% { margin:2px } 100% { margin:0 }
+      0% { margin:0 }
+      25% { margin-left:4px }
+      50% { margin-top:4px }
+      75% { margin-left:-4px }
+      100% { margin:0 }
     }
+
     .dot.running {
-      animation: pulse 520ms ease-in-out infinite alternate,
-                 jitter 130ms linear infinite;
+      animation:
+        pulse 520ms ease-in-out infinite alternate,
+        jitter 130ms linear infinite;
     }
-    .dot.win { outline:4px solid white; animation:none; }
+
+    .dot.win {
+      outline:8px solid white;
+      animation:none;
+    }
   </style>
 </head>
 
 <body>
   <div id="hud">
-    <div>Dedos: <b id="count">0</b></div>
     <div id="state">esperando</div>
   </div>
 
@@ -59,64 +95,107 @@
 
 <script>
 const zone = document.getElementById("zone");
-const countEl = document.getElementById("count");
 const stateEl = document.getElementById("state");
 const msg = document.getElementById("msg");
 
 const MAX = 5;
 const ROUND = 4000;
-const COLORS = ["#ff3b30","#ff9500","#ffcc00","#34c759","#00c7be",
-                "#007aff","#5856d6","#af52de","#ff2d55","#8e8e93"];
+
+/* 🎨 COLORES PERMITIDOS (ninguno blanco, gris o negro) */
+const COLORS = [
+  "#ff3b30", // rojo
+  "#ff9500", // naranja
+  "#ffcc00", // amarillo
+  "#34c759", // verde
+  "#00c7be", // turquesa
+  "#007aff", // azul
+  "#5856d6", // índigo
+  "#af52de", // morado
+  "#ff2d55", // rosa
+  "#ff6f00"  // naranja fuerte
+];
 
 const fingers = new Map();
 let state = "waiting";
 let timer = null;
 let lastCount = 0;
 
-function random(a){ return a[Math.floor(Math.random()*a.length)] }
+function random(a){
+  return a[Math.floor(Math.random()*a.length)];
+}
 
 function render(win=null){
   document.querySelectorAll(".dot").forEach(d=>d.remove());
+
   for(const [id,f] of fingers){
     const d=document.createElement("div");
-    d.className="dot"+(state==="running"?" running":"")+(win===id?" win":"");
-    d.style.left=f.x+"px"; d.style.top=f.y+"px";
+    d.className="dot"+
+      (state==="running"?" running":"")+
+      (win===id?" win":"");
+
+    d.style.left=f.x+"px";
+    d.style.top=f.y+"px";
     d.style.background=f.color;
+
     document.body.appendChild(d);
   }
 }
 
 function start(){
   if(fingers.size<2) return;
-  state="running"; stateEl.textContent="jugando";
+
+  state="running";
+  stateEl.textContent="jugando";
+
   let colors=[...COLORS].sort(()=>Math.random()-0.5);
-  [...fingers.values()].forEach((f,i)=>{f.taps=0;f.color=colors[i]});
+  [...fingers.values()].forEach((f,i)=>{
+    f.taps=0;
+    f.color=colors[i];
+  });
+
   render();
   timer=setTimeout(end,ROUND);
 }
 
 function end(){
-  state="fin"; stateEl.textContent="fin";
+  state="fin";
+  stateEl.textContent="fin";
+
   const arr=[...fingers.entries()];
   const w7=arr.filter(([_,f])=>f.taps===7).map(([id])=>id);
   let win=null;
+
   if(w7.length) win=random(w7);
   else{
     const ok=arr.filter(([_,f])=>f.taps!==9).map(([id])=>id);
     win=ok.length?random(ok):random(arr.map(([id])=>id));
   }
+
   render(win);
-  setTimeout(()=>{state="waiting";stateEl.textContent="esperando"},1000);
+  setTimeout(()=>{
+    state="waiting";
+    stateEl.textContent="esperando";
+  },1200);
 }
 
 zone.addEventListener("touchstart",e=>{
   e.preventDefault();
+
   for(const t of e.changedTouches){
-    if(!fingers.has(t.identifier)&&fingers.size<MAX)
-      fingers.set(t.identifier,{x:t.clientX,y:t.clientY,taps:0,color:"#ccc"});
-    if(state==="running") fingers.get(t.identifier).taps++;
+    if(!fingers.has(t.identifier)&&fingers.size<MAX){
+      fingers.set(t.identifier,{
+        x:t.clientX,
+        y:t.clientY,
+        taps:0,
+        color:"#ff3b30"
+      });
+    }
+
+    if(state==="running"){
+      fingers.get(t.identifier).taps++;
+    }
   }
-  countEl.textContent=fingers.size;
+
   if(lastCount<2 && fingers.size>=2) start();
   lastCount=fingers.size;
   render();
@@ -124,8 +203,9 @@ zone.addEventListener("touchstart",e=>{
 
 zone.addEventListener("touchend",e=>{
   e.preventDefault();
-  for(const t of e.changedTouches) fingers.delete(t.identifier);
-  countEl.textContent=fingers.size;
+  for(const t of e.changedTouches){
+    fingers.delete(t.identifier);
+  }
   lastCount=fingers.size;
   render();
 },{passive:false});
