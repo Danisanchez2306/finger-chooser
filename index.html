@@ -121,7 +121,7 @@ html, body{
 }
 
 /* =========================
-   DOT + RINGS (circle perfecto)
+   DOT + RINGS (como estaba antes)
    ========================= */
 .dot{
   --c:#ff3b30;
@@ -129,74 +129,68 @@ html, body{
   transform:translate(-50%,-50%);
   pointer-events:none;z-index:5;
   opacity:.95;
+  box-shadow:0 0 40px rgba(255,255,255,.18);
   transition:opacity .26s, transform .26s, filter .26s;
-}
-
-.dot .fill{
-  position:absolute;inset:0;border-radius:50%;
   background:var(--c);
 }
 
-/* contenedor de aros */
-.dot .rings{
-  position:absolute;
-  inset:-18px;
-  width:calc(100% + 36px);
-  height:calc(100% + 36px);
-  pointer-events:none;
+/* “Crear aro” (1,2s) — sin engordar, solo aparece suave */
+.dot.reveal::before,
+.dot.reveal::after{
+  animation:revealRing 1.2s ease-out forwards;
+}
+@keyframes revealRing{
+  from{ opacity:0; transform:rotate(0deg) scale(.96); }
+  to{ opacity:1; transform:rotate(0deg) scale(1); }
+}
+
+/* ARO 1 (exterior) */
+.dot::before{
+  content:"";position:absolute;inset:-16px;border-radius:50%;
+  background:conic-gradient(
+    from 0deg,
+    var(--c) 0 60deg,
+    transparent 60 155deg,
+    var(--c) 155 210deg,
+    transparent 210 360deg
+  );
+  -webkit-mask:radial-gradient(circle,transparent 60%,#000 61%);
+  mask:radial-gradient(circle,transparent 60%,#000 61%);
+  opacity:0; /* hasta reveal */
   transform:rotate(0deg);
-
-  /* suaviza en iPhone */
-  -webkit-transform:translateZ(0);
-  transform:translateZ(0);
-  backface-visibility:hidden;
 }
 
-/* círculos perfectos */
-.dot .arc{
-  fill:none;
-  stroke:var(--c);
-  stroke-linecap:butt;
-  vector-effect: non-scaling-stroke;
-  shape-rendering: geometricPrecision;
-  transform-origin:50% 50%;
+/* ARO 2 (interior) */
+.dot::after{
+  content:"";position:absolute;inset:-8px;border-radius:50%;
+  background:conic-gradient(
+    from 30deg,
+    transparent 0 35deg,
+    var(--c) 35 85deg,
+    transparent 85 200deg,
+    var(--c) 200 245deg,
+    transparent 245 360deg
+  );
+  -webkit-mask:radial-gradient(circle,transparent 67%,#000 68%);
+  mask:radial-gradient(circle,transparent 67%,#000 68%);
+  opacity:0; /* hasta reveal */
+  transform:rotate(0deg);
 }
 
-/* Grosor fijo (NO engorda) */
-.dot .arc.outer{
-  stroke-width:12;
-  opacity:.95;
-
-  /* patrón fijo (no se anima) */
-  stroke-dasharray:58 42;
-  /* empieza oculto */
-  stroke-dashoffset:58;
+/* Animación durante la espera */
+.dot.running::before{
+  animation:ringSpin .65s linear infinite, ringBreathe .9s ease-in-out infinite;
+  opacity:1;
 }
-.dot .arc.inner{
-  stroke-width:8;
-  opacity:.60;
-
-  stroke-dasharray:46 54;
-  stroke-dashoffset:46;
+.dot.running::after{
+  animation:ringSpinReverse .72s linear infinite, ringBreathe2 .95s ease-in-out infinite;
+  opacity:.65;
 }
 
-/* “dibujar aro” — 1,2 segundos (animamos SOLO dashoffset => no serrucho) */
-.dot.reveal .arc.outer{ animation:drawOuter 1.2s ease-out forwards; }
-.dot.reveal .arc.inner{ animation:drawInner 1.2s ease-out forwards; }
-
-@keyframes drawOuter{ to{ stroke-dashoffset:0; } }
-@keyframes drawInner{ to{ stroke-dashoffset:0; } }
-
-/* Durante espera: girar */
-.dot.running .rings{
-  animation:spin 650ms linear infinite, breathe 900ms ease-in-out infinite;
-  will-change: transform, filter;
-}
-@keyframes spin{ to{ transform:rotate(360deg); } }
-@keyframes breathe{
-  0%,100%{ filter:brightness(1); }
-  50%{ filter:brightness(1.12); }
-}
+@keyframes ringSpin{ to{ transform:rotate(360deg); } }
+@keyframes ringSpinReverse{ to{ transform:rotate(-360deg); } }
+@keyframes ringBreathe{ 0%,100%{ filter:brightness(1); } 50%{ filter:brightness(1.12); } }
+@keyframes ringBreathe2{ 0%,100%{ opacity:.45; } 50%{ opacity:.75; } }
 
 /* Perdedor */
 .dot.lose{
@@ -205,22 +199,31 @@ html, body{
   filter:blur(2px) brightness(.9);
 }
 
-/* Ganador: donut negro + aro fijo */
+/* Ganador: donut negro + anillos (como lo tenías antes) */
 @keyframes winPop{
-  0%{ transform:translate(-50%,-50%) scale(1.18); }
-  100%{ transform:translate(-50%,-50%) scale(1.05); }
+  0%{transform:translate(-50%,-50%) scale(1.18)}
+  100%{transform:translate(-50%,-50%) scale(1.05)}
 }
-.dot.win{ animation:winPop .22s ease-out forwards; }
-.dot.win .fill{ background:#000 !important; }
+.dot.win{
+  background:#000 !important;
+  box-shadow:none;
+  opacity:1;
+  animation:winPop .22s ease-out forwards;
+}
+.dot.win::before{opacity:1;}
+.dot.win::after{opacity:1;}
 
-/* Aro completo visible al ganar */
-.dot.win .arc.outer{ stroke-dashoffset:0 !important; opacity:1; }
-.dot.win .arc.inner{ stroke-dashoffset:0 !important; opacity:1; }
-
-/* Un poco más lento al girar el ganador */
-.dot.win .rings{
-  animation:spin 900ms linear infinite;
-  filter:drop-shadow(0 0 2px rgba(0,0,0,.35));
+/* donut interno */
+.dot.win::after{
+  /* mantenemos el aro interior, y además metemos “donut” con box-shadow */
+  -webkit-mask:none; mask:none;
+  background:transparent;
+  inset:0;
+  box-shadow:
+    inset 0 0 0 10px var(--c),
+    inset 0 0 0 18px #000;
+  border-radius:50%;
+  opacity:1;
 }
 </style>
 </head>
@@ -293,16 +296,8 @@ html, body{
 
   const ensureDot=id=>{
     if(dotEls.has(id)) return dotEls.get(id);
-
     const d=document.createElement("div");
     d.className="dot";
-    d.innerHTML = `
-      <div class="fill"></div>
-      <svg class="rings" viewBox="0 0 100 100" aria-hidden="true">
-        <circle class="arc outer" cx="50" cy="50" r="44" pathLength="100"></circle>
-        <circle class="arc inner" cx="50" cy="50" r="36" pathLength="100"></circle>
-      </svg>
-    `;
     document.body.appendChild(d);
     dotEls.set(id,d);
     return d;
@@ -330,6 +325,8 @@ html, body{
       el.style.left=f.x+"px"; el.style.top=f.y+"px";
       const c=f.color||COLORS[0];
       el.style.setProperty("--c",c);
+      el.style.background = c;
+
       el.classList.toggle("running", state==="running");
       el.classList.remove("win","lose");
     }
@@ -530,9 +527,7 @@ html, body{
       if(!el) continue;
       el.classList.remove("running");
       el.classList.add(winSet.has(id) ? "win" : "lose");
-
-      // aro visible sí o sí
-      el.classList.add("reveal");
+      el.classList.add("reveal"); // aro visible sí o sí
     }
 
     const winColors=survivors.map(id=>fingers.get(id)?.color).filter(Boolean);
@@ -579,7 +574,7 @@ html, body{
 
         const el = ensureDot(id);
 
-        // retrigger del “dibujar aro”
+        // retrigger del “crear aro” (1,2s)
         el.classList.remove("reveal");
         void el.offsetWidth;
         el.classList.add("reveal");
@@ -723,3 +718,4 @@ html, body{
 </script>
 </body>
 </html>
+
