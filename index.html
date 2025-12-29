@@ -18,24 +18,97 @@ html, body{
 
 #topbar{
   position:fixed;top:12px;left:12px;right:12px;z-index:10;
-  display:flex;justify-content:space-between;align-items:center;gap:12px;
+  display:flex;justify-content:space-between;align-items:flex-start;gap:12px;
 }
-#state{font-size:18px;opacity:.95;text-transform:lowercase;}
-#controls{
-  display:flex;align-items:center;gap:8px;
-  background:rgba(255,255,255,.10);padding:10px 12px;border-radius:16px;
+#state{
+  position:fixed;left:50%;top:16px;transform:translateX(-50%);
+  font-size:14px;opacity:.55;text-transform:lowercase;z-index:10;
+  pointer-events:none;
 }
-#winnerCount{
-  appearance:none;-webkit-appearance:none;
-  border:1px solid rgba(255,255,255,.25);
-  background:rgba(0,0,0,.35);color:white;
-  padding:8px 10px;border-radius:12px;font-size:14px;outline:none;
+
+/* Botón circular verde arriba-izquierda (1F) */
+#winBtn{
+  width:76px;height:76px;border-radius:50%;
+  background:#7fb13a;
+  display:flex;align-items:center;justify-content:center;
+  color:white;font-size:34px;font-weight:500;
+  border:none;outline:none;
+  box-shadow:0 6px 18px rgba(0,0,0,.35);
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Botón ? arriba-derecha (solo decorativo/ayuda) */
+#helpBtn{
+  width:76px;height:76px;border-radius:50%;
+  background:#ff00a8;
+  display:flex;align-items:center;justify-content:center;
+  color:white;font-size:44px;font-weight:500;
+  border:none;outline:none;
+  box-shadow:0 6px 18px rgba(0,0,0,.35);
+  -webkit-tap-highlight-color: transparent;
 }
 
 /* Texto discreto abajo derecha */
 #hint{
   position:fixed;right:10px;bottom:10px;font-size:11px;
   color:#000;opacity:.6;z-index:20;user-select:none;pointer-events:none;
+}
+
+/* Modal overlay */
+#modalOverlay{
+  position:fixed;inset:0;z-index:50;
+  display:none;align-items:center;justify-content:center;
+  background:rgba(0,0,0,.15);
+}
+#modalOverlay.on{display:flex;}
+
+/* Panel blanco */
+#modal{
+  width:min(340px,86vw);
+  background:#fff;
+  border-radius:16px;
+  box-shadow:0 20px 60px rgba(0,0,0,.35);
+  padding:16px 16px 14px;
+  color:#1a1a1a;
+}
+
+/* Fila + - número */
+#row{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:4px 6px 14px;
+}
+.stepBtn{
+  width:54px;height:54px;border-radius:50%;
+  border:3px solid #7fb13a;
+  background:#fff;
+  color:#7fb13a;
+  font-size:34px;line-height:0;
+  display:flex;align-items:center;justify-content:center;
+  -webkit-tap-highlight-color: transparent;
+}
+#count{
+  font-size:44px;font-weight:500;
+}
+
+/* Segmented */
+#seg{
+  width:100%;
+  border:2px solid #7fb13a;
+  border-radius:14px;
+  overflow:hidden;
+  display:flex;
+}
+.segBtn{
+  flex:1;
+  padding:10px 0;
+  font-size:18px;
+  border:none;outline:none;
+  background:#fff;
+  color:#7fb13a;
+}
+.segBtn.active{
+  background:#7fb13a;
+  color:#fff;
 }
 
 /* Círculo */
@@ -89,30 +162,51 @@ html, body{
 <div id="colorFill"></div>
 
 <div id="topbar">
-  <div id="state">esperando</div>
-  <div id="controls">
-    <select id="winnerCount">
-      <option value="1" selected>1</option>
-      <option value="2">2</option>
-      <option value="3">3</option>
-      <option value="4">4</option>
-    </select>
+  <button id="winBtn" aria-label="Ganadores">1F</button>
+  <button id="helpBtn" aria-label="Ayuda">?</button>
+</div>
+
+<div id="state">esperando</div>
+<div id="hint">8 gana · W pierde · 7 gana · 9 pierde</div>
+
+<div id="modalOverlay" role="dialog" aria-modal="true">
+  <div id="modal">
+    <div id="row">
+      <button class="stepBtn" id="minus" aria-label="Menos">−</button>
+      <div id="count">1</div>
+      <button class="stepBtn" id="plus" aria-label="Más">+</button>
+    </div>
+    <div id="seg">
+      <button class="segBtn active" id="segFingers">Fingers</button>
+      <button class="segBtn" id="segGroups">Groups</button>
+    </div>
   </div>
 </div>
 
-<div id="hint">8 gana · W pierde · 7 gana · 9 pierde</div>
 <div id="zone"></div>
 
 <script>
 (() => {
   const zone = document.getElementById("zone");
   const stateEl = document.getElementById("state");
-  const winnerCountEl = document.getElementById("winnerCount");
   const colorFill = document.getElementById("colorFill");
   const hintEl = document.getElementById("hint");
 
+  // UI
+  const winBtn = document.getElementById("winBtn");
+  const helpBtn = document.getElementById("helpBtn");
+  const overlay = document.getElementById("modalOverlay");
+  const minusBtn = document.getElementById("minus");
+  const plusBtn = document.getElementById("plus");
+  const countEl = document.getElementById("count");
+  const segFingers = document.getElementById("segFingers");
+  const segGroups = document.getElementById("segGroups");
+
   const MAX=5, ROUND_MS=4000, FILL_MS=5000;
   const COLORS=["#ff3b30","#ff9500","#ffcc00","#34c759","#00c7be","#007aff","#5856d6","#af52de","#ff2d55","#ff6f00"];
+
+  // Estado ganadores (1–4)
+  let winnerCount = 1;
 
   // id -> {x,y,taps,color,path:[], eightLocked:boolean, wLocked:boolean}
   const fingers=new Map();
@@ -129,7 +223,6 @@ html, body{
   };
   const removeDot=id=>{ if(dotEls.has(id)){dotEls.get(id).remove(); dotEls.delete(id)} };
 
-  // Mantiene colores ya asignados y solo asigna a dedos nuevos (sin repetir)
   function ensureUniqueColorsStable(){
     const used = new Set();
     for (const f of fingers.values()){
@@ -166,7 +259,7 @@ html, body{
     if(fingers.size<2) return;
     state="running"; stateEl.textContent="jugando";
 
-    // ✅ NO se mantienen entre rondas
+    // no mantener 8/W entre rondas
     for(const f of fingers.values()){
       f.taps = 0;
       f.path = [];
@@ -181,7 +274,7 @@ html, body{
     timer=setTimeout(endRound,ROUND_MS);
   }
 
-  // --- Detección 8 (no muy estricta) ---
+  // 8 gana (no muy estricto)
   function isEight(path){
     if(path.length < 14) return false;
 
@@ -194,7 +287,6 @@ html, body{
     const size=Math.max(w,h);
     if(size < 70) return false;
 
-    // cambios verticales (dos bucles)
     let turns=0;
     for(let i=2;i<path.length;i++){
       const aY = path[i-2].y - path[i-1].y;
@@ -203,7 +295,6 @@ html, body{
     }
     if(turns < 6) return false;
 
-    // cruce cerca del centro
     const cx=(minX+maxX)/2, cy=(minY+maxY)/2;
     let crosses=0;
     const r = Math.min(w,h) * 0.14;
@@ -215,7 +306,7 @@ html, body{
     return true;
   }
 
-  // --- Detección W (no muy estricta) + tamaño mínimo ---
+  // W pierde (no muy estricta)
   function isW(path){
     if(path.length < 10) return false;
 
@@ -228,16 +319,12 @@ html, body{
     const size=Math.max(w,h);
     if(size < 70) return false;
 
-    // “picos”: cambios de dirección en Y
     let changes=0;
     for(let i=2;i<path.length;i++){
       const a=path[i-2].y - path[i-1].y;
       const b=path[i-1].y - path[i].y;
       if(a*b < 0) changes++;
     }
-
-    // No muy estricta: con 3 cambios claros ya vale
-    // (una W típica dará 4+)
     return changes >= 3;
   }
 
@@ -260,29 +347,19 @@ html, body{
   }
 
   function setHintColorWhenFill(on, color){
-    if(on){
-      hintEl.style.color = color || "#000";
-    }else{
-      hintEl.style.color = "#000";
-    }
+    hintEl.style.color = on ? (color || "#000") : "#000";
   }
 
   function endRound(){
     state="fin"; stateEl.textContent="fin";
-    const wanted = (+winnerCountEl.value || 1);
+    const wanted = winnerCount;
     const entries=[...fingers.entries()];
 
-    // 8 bloqueado (prioridad)
     const eights = entries.filter(([_,f])=>f.eightLocked === true).map(([id])=>id);
-
-    // 7/9
     const sevens = entries.filter(([_,f])=>f.taps===7).map(([id])=>id);
     const banned9= entries.filter(([_,f])=>f.taps===9).map(([id])=>id);
-
-    // W bloqueada (solo ronda)
     const bannedW= entries.filter(([_,f])=>f.wLocked === true).map(([id])=>id);
 
-    // Si alguien bloqueó W, nunca gana; si bloqueó 8, gana prioritario
     const banned = new Set([...bannedW, ...banned9]);
 
     let winners=[];
@@ -309,7 +386,6 @@ html, body{
     setFillFromColors(winColors);
     colorFill.classList.add("on");
 
-    // Texto: mismo color que el fondo mientras está el fill
     setHintColorWhenFill(true, winColors[0] || "#000");
 
     clearTimeout(timer);
@@ -330,13 +406,13 @@ html, body{
     }, FILL_MS);
   }
 
-  // helper: grabar puntos y bloquear 8/W si se detecta
+  // Track + lock (para que si cierras el 8 o la W, ya no se estropee)
   function trackAndLockIfNeeded(f){
     if(!f || f.eightLocked || f.wLocked) return;
 
     f.path.push({x:f.x,y:f.y});
 
-    // prioridad: si detecta 8, bloquea 8 y deja de grabar
+    // prioridad: 8
     if(isEight(f.path)){
       f.eightLocked = true;
       f.wLocked = false;
@@ -344,7 +420,7 @@ html, body{
       return;
     }
 
-    // si detecta W, bloquea W y deja de grabar
+    // W
     if(isW(f.path)){
       f.wLocked = true;
       f.eightLocked = false;
@@ -372,7 +448,7 @@ html, body{
 
         if(state==="running"){
           f.taps++;
-          trackAndLockIfNeeded(f); // ✅ punto inicial + lock live
+          trackAndLockIfNeeded(f);
         }
       }
     }
@@ -381,7 +457,7 @@ html, body{
 
     if(changed){
       ensureUniqueColorsStable();
-      if(state==="running") restartRoundTimer(); // NO resetea 8/W ya hechos
+      if(state==="running") restartRoundTimer();
     }
 
     lastCount=fingers.size;
@@ -397,8 +473,6 @@ html, body{
       if(!f) continue;
 
       f.x=t.clientX; f.y=t.clientY;
-
-      // ✅ si ya bloqueó 8 o W, ignorar movimiento
       if(f.eightLocked || f.wLocked) continue;
 
       trackAndLockIfNeeded(f);
@@ -414,7 +488,6 @@ html, body{
       if(fingers.has(t.identifier)){
         const f=fingers.get(t.identifier);
 
-        // punto final (si no estaba bloqueado)
         if(state==="running" && f && !(f.eightLocked || f.wLocked)){
           trackAndLockIfNeeded(f);
         }
@@ -444,7 +517,6 @@ html, body{
         if(state==="running" && f && !(f.eightLocked || f.wLocked)){
           trackAndLockIfNeeded(f);
         }
-
         fingers.delete(t.identifier);
         removeDot(t.identifier);
         changed=true;
@@ -459,6 +531,59 @@ html, body{
       renderLive();
     }
   }, {passive:false});
+
+  // --- UI: modal winners ---
+  function updateWinnersUI(){
+    countEl.textContent = String(winnerCount);
+    winBtn.textContent = String(winnerCount) + "F";
+  }
+  updateWinnersUI();
+
+  function openModal(){
+    overlay.classList.add("on");
+  }
+  function closeModal(){
+    overlay.classList.remove("on");
+  }
+
+  winBtn.addEventListener("click", (e)=>{ e.preventDefault(); openModal(); });
+  overlay.addEventListener("click", (e)=>{
+    if(e.target === overlay) closeModal();
+  });
+
+  minusBtn.addEventListener("click", (e)=>{
+    e.preventDefault();
+    winnerCount = Math.max(1, winnerCount - 1);
+    updateWinnersUI();
+  });
+  plusBtn.addEventListener("click", (e)=>{
+    e.preventDefault();
+    winnerCount = Math.min(4, winnerCount + 1);
+    updateWinnersUI();
+  });
+
+  segFingers.addEventListener("click",(e)=>{
+    e.preventDefault();
+    segFingers.classList.add("active");
+    segGroups.classList.remove("active");
+  });
+  segGroups.addEventListener("click",(e)=>{
+    e.preventDefault();
+    // Solo visual (como en tu captura)
+    segGroups.classList.add("active");
+    segFingers.classList.remove("active");
+    // volvemos a Fingers automáticamente al cerrar, para que no confunda
+    setTimeout(()=>{
+      segFingers.classList.add("active");
+      segGroups.classList.remove("active");
+    }, 250);
+  });
+
+  helpBtn.addEventListener("click",(e)=>{
+    e.preventDefault();
+    // Minimalista: abre/cierra el modal también (o puedes poner instrucciones)
+    openModal();
+  });
 
   // init
   stateEl.textContent="esperando";
