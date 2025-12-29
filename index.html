@@ -145,6 +145,11 @@ html, body{
   height:calc(100% + 36px);
   pointer-events:none;
   transform:rotate(0deg);
+
+  /* suaviza en iPhone */
+  -webkit-transform:translateZ(0);
+  transform:translateZ(0);
+  backface-visibility:hidden;
 }
 
 /* círculos perfectos */
@@ -158,15 +163,29 @@ html, body{
 }
 
 /* Grosor fijo (NO engorda) */
-.dot .arc.outer{ stroke-width:12; opacity:.95; stroke-dasharray:0 100; }
-.dot .arc.inner{ stroke-width:8;  opacity:.60; stroke-dasharray:0 100; }
+.dot .arc.outer{
+  stroke-width:12;
+  opacity:.95;
 
-/* “dibujar aro” — dura 1,2 segundos */
-.dot.reveal .arc.outer{ animation:drawArcOuter 1.2s ease-out forwards; }
-.dot.reveal .arc.inner{ animation:drawArcInner 1.2s ease-out forwards; }
+  /* patrón fijo (no se anima) */
+  stroke-dasharray:58 42;
+  /* empieza oculto */
+  stroke-dashoffset:58;
+}
+.dot .arc.inner{
+  stroke-width:8;
+  opacity:.60;
 
-@keyframes drawArcOuter{ to{ stroke-dasharray:58 42; } }
-@keyframes drawArcInner{ to{ stroke-dasharray:46 54; } }
+  stroke-dasharray:46 54;
+  stroke-dashoffset:46;
+}
+
+/* “dibujar aro” — 1,2 segundos (animamos SOLO dashoffset => no serrucho) */
+.dot.reveal .arc.outer{ animation:drawOuter 1.2s ease-out forwards; }
+.dot.reveal .arc.inner{ animation:drawInner 1.2s ease-out forwards; }
+
+@keyframes drawOuter{ to{ stroke-dashoffset:0; } }
+@keyframes drawInner{ to{ stroke-dashoffset:0; } }
 
 /* Durante espera: girar */
 .dot.running .rings{
@@ -195,8 +214,8 @@ html, body{
 .dot.win .fill{ background:#000 !important; }
 
 /* Aro completo visible al ganar */
-.dot.win .arc.outer{ stroke-dasharray:90 10 !important; opacity:1; }
-.dot.win .arc.inner{ stroke-dasharray:80 20 !important; opacity:1; }
+.dot.win .arc.outer{ stroke-dashoffset:0 !important; opacity:1; }
+.dot.win .arc.inner{ stroke-dashoffset:0 !important; opacity:1; }
 
 /* Un poco más lento al girar el ganador */
 .dot.win .rings{
@@ -511,7 +530,9 @@ html, body{
       if(!el) continue;
       el.classList.remove("running");
       el.classList.add(winSet.has(id) ? "win" : "lose");
-      el.classList.add("reveal"); // aro visible sí o sí
+
+      // aro visible sí o sí
+      el.classList.add("reveal");
     }
 
     const winColors=survivors.map(id=>fingers.get(id)?.color).filter(Boolean);
@@ -695,7 +716,7 @@ html, body{
   updateUI();
 
   stateEl.textContent="esperando";
-  setHintColorWhenFill(false); // negro sobre negro
+  setHintColorWhenFill(false);
   ensureUniqueColorsStable();
   renderLive();
 })();
