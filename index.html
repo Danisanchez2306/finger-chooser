@@ -100,7 +100,7 @@ html, body{
   </div>
 </div>
 
-<div id="hint">□/▭ gana (95% cerrado) · W pierde · 7 gana · 9 pierde</div>
+<div id="hint">8 gana · W pierde · 7 gana · 9 pierde</div>
 <div id="zone"></div>
 
 <script>
@@ -160,46 +160,34 @@ html, body{
     timer=setTimeout(endRound,ROUND_MS);
   }
 
-  // Rectángulo/cuadrado estricto + cierre 95%
-  function isSquare(path){
-    if (path.length < 10) return false;
+  // --- Detección de 8 (no muy estricta) ---
+  function isEight(path){
+    if(path.length < 14) return false;
 
-    let minX=Infinity, maxX=-Infinity, minY=Infinity, maxY=-Infinity;
-    for (const p of path){
-      minX = Math.min(minX, p.x);
-      maxX = Math.max(maxX, p.x);
-      minY = Math.min(minY, p.y);
-      maxY = Math.max(maxY, p.y);
+    let minX=Infinity,maxX=-Infinity,minY=Infinity,maxY=-Infinity;
+    for(const p of path){
+      minX=Math.min(minX,p.x); maxX=Math.max(maxX,p.x);
+      minY=Math.min(minY,p.y); maxY=Math.max(maxY,p.y);
     }
+    const w=maxX-minX, h=maxY-minY;
+    if(Math.max(w,h) < 70) return false; // evita micro-garabatos
 
-    const w = maxX - minX;
-    const h = maxY - minY;
-    const size = Math.max(w, h);
-    if (size < 70) return false;
-
-    const start = path[0];
-    const end   = path[path.length - 1];
-    const closeDist = Math.hypot(end.x - start.x, end.y - start.y);
-    if (closeDist > size * 0.05) return false; // 95% cerrado
-
-    let corners = 0;
-    for (let i = 2; i < path.length; i++){
-      const ax = path[i-1].x - path[i-2].x;
-      const ay = path[i-1].y - path[i-2].y;
-      const bx = path[i].x   - path[i-1].x;
-      const by = path[i].y   - path[i-1].y;
-
-      const aLen = Math.hypot(ax, ay) || 1;
-      const bLen = Math.hypot(bx, by) || 1;
-      const cos = (ax*bx + ay*by) / (aLen*bLen);
-
-      if (cos < 0.35) corners++;
+    // Muchos cambios de dirección (dos bucles)
+    let turns=0;
+    for(let i=2;i<path.length;i++){
+      const aY = path[i-2].y - path[i-1].y;
+      const bY = path[i-1].y - path[i].y;
+      if(aY*bY < 0) turns++;
     }
+    if(turns < 6) return false;
 
-    if (corners < 3) return false;
-
-    const ratio = w > h ? (w/h) : (h/w);
-    if (ratio > 3.2) return false;
+    // Cruce cerca del centro (intersección del 8)
+    const cx=(minX+maxX)/2, cy=(minY+maxY)/2;
+    let crosses=0;
+    for(const p of path){
+      if(Math.hypot(p.x-cx,p.y-cy) < Math.min(w,h)*0.12) crosses++;
+    }
+    if(crosses < 2) return false;
 
     return true;
   }
@@ -238,15 +226,15 @@ html, body{
     const wanted = (+winnerCountEl.value || 1);
     const entries=[...fingers.entries()];
 
-    const rects   = entries.filter(([_,f])=>isSquare(f.path)).map(([id])=>id);
-    const sevens  = entries.filter(([_,f])=>f.taps===7).map(([id])=>id);
-    const bannedW = entries.filter(([_,f])=>isW(f.path)).map(([id])=>id);
-    const banned9 = entries.filter(([_,f])=>f.taps===9).map(([id])=>id);
-    const banned  = new Set([...bannedW, ...banned9]);
+    const eights = entries.filter(([_,f])=>isEight(f.path)).map(([id])=>id);
+    const sevens = entries.filter(([_,f])=>f.taps===7).map(([id])=>id);
+    const bannedW= entries.filter(([_,f])=>isW(f.path)).map(([id])=>id);
+    const banned9= entries.filter(([_,f])=>f.taps===9).map(([id])=>id);
+    const banned = new Set([...bannedW, ...banned9]);
 
     let winners=[];
-    if(rects.length){
-      winners = pickWinners(rects, wanted);
+    if(eights.length){
+      winners = pickWinners(eights, wanted);
     }else if(sevens.length){
       winners = pickWinners(sevens, wanted);
     }else{
@@ -300,8 +288,8 @@ html, body{
       if(f){
         f.x=t.clientX; f.y=t.clientY;
         if(state==="running"){
-          f.taps++;                // 7/9 taps
-          f.path.push({x:f.x,y:f.y}); // ✅ punto inicial real
+          f.taps++;
+          f.path.push({x:f.x,y:f.y});
         }
       }
     }
@@ -325,7 +313,7 @@ html, body{
       const f=fingers.get(t.identifier);
       if(f){
         f.x=t.clientX; f.y=t.clientY;
-        f.path.push({x:f.x, y:f.y}); // ✅ puntos de movimiento
+        f.path.push({x:f.x, y:f.y});
       }
     }
     renderLive();
@@ -337,13 +325,10 @@ html, body{
 
     for(const t of e.changedTouches){
       if(fingers.has(t.identifier)){
-        const f = fingers.get(t.identifier);
-
-        // ✅ punto final real antes de borrar
+        const f=fingers.get(t.identifier);
         if(state==="running" && f && f.path){
           f.path.push({x:f.x, y:f.y});
         }
-
         fingers.delete(t.identifier);
         removeDot(t.identifier);
         changed=true;
@@ -365,7 +350,7 @@ html, body{
 
     for(const t of e.changedTouches){
       if(fingers.has(t.identifier)){
-        const f = fingers.get(t.identifier);
+        const f=fingers.get(t.identifier);
         if(state==="running" && f && f.path){
           f.path.push({x:f.x, y:f.y});
         }
