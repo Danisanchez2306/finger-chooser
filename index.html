@@ -1,128 +1,260 @@
 <!doctype html>
 <html lang="es">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
 <title>Finger Chooser</title>
 
 <style>
-html,body{
-  margin:0;
-  height:100%;
-  background:#000;
-  overflow:hidden;
-  font-family:-apple-system,system-ui,sans-serif;
+:root{ --green:#7fb13a; --orange:#ff8a00; }
+html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-apple-system,system-ui,sans-serif; }
+#zone{ height:100%; touch-action:none; user-select:none; -webkit-user-select:none; }
+
+#colorFill{position:fixed;inset:0;opacity:0;transition:opacity .22s;z-index:1;pointer-events:none;}
+#colorFill.on{opacity:1;}
+
+/* Top UI */
+#topbar{
+  position:fixed;top:12px;left:12px;right:12px;z-index:10;
+  display:flex;justify-content:space-between;align-items:flex-start;gap:12px;
 }
-#zone{
-  height:100%;
-  touch-action:none;
+#winBtn{
+  width:76px;height:76px;border-radius:50%;
+  background:var(--green);
+  display:flex;align-items:center;justify-content:center;
+  color:#fff;font-size:34px;font-weight:500;
+  border:none;outline:none;
+  box-shadow:0 6px 18px rgba(0,0,0,.35);
+  -webkit-tap-highlight-color:transparent;
+}
+#helpBtn{
+  width:76px;height:76px;border-radius:50%;
+  background:#ff00a8;
+  display:flex;align-items:center;justify-content:center;
+  color:#fff;font-size:44px;font-weight:500;
+  border:none;outline:none;
+  box-shadow:0 6px 18px rgba(0,0,0,.35);
+  -webkit-tap-highlight-color:transparent;
 }
 
-/* ======================
-   DOT + AROS (ORIGINAL)
-   ====================== */
+/* Texto discreto abajo derecha (y un “state” centrado que siempre comparte color) */
+#hint{
+  position:fixed;right:10px;bottom:10px;font-size:11px;
+  color:#000;opacity:.6;z-index:20;user-select:none;pointer-events:none;
+}
+#state{
+  position:fixed;left:50%;top:16px;transform:translateX(-50%);
+  font-size:13px;opacity:.55;text-transform:lowercase;z-index:10;
+  color:#000;pointer-events:none;
+}
+
+/* Modal */
+#modalOverlay{
+  position:fixed;inset:0;z-index:50;
+  display:none;align-items:center;justify-content:center;
+  background:rgba(0,0,0,.15);
+}
+#modalOverlay.on{display:flex;}
+#modal{
+  width:min(340px,86vw);
+  background:#fff;border-radius:16px;
+  box-shadow:0 20px 60px rgba(0,0,0,.35);
+  padding:16px 16px 14px;color:#1a1a1a;
+}
+#row{ display:flex;align-items:center;justify-content:space-between;padding:4px 6px 14px; }
+.stepBtn{
+  width:54px;height:54px;border-radius:50%;
+  border:3px solid var(--accent);
+  background:#fff;color:var(--accent);
+  font-size:34px;line-height:0;
+  display:flex;align-items:center;justify-content:center;
+  -webkit-tap-highlight-color:transparent;
+}
+#count{ font-size:44px;font-weight:500;color:#4a4a4a; }
+#seg{
+  width:100%;
+  border:2px solid var(--accent);
+  border-radius:14px;overflow:hidden;display:flex;
+}
+.segBtn{
+  flex:1;padding:10px 0;font-size:18px;
+  border:none;outline:none;background:#fff;color:var(--accent);
+}
+.segBtn.active{ background:var(--accent); color:#fff; }
+
+/* =========================
+   DOT + AROS (animación “decente”)
+   ========================= */
 .dot{
   --c:#ff3b30;
   position:fixed;
-  width:130px;
-  height:130px;
-  border-radius:50%;
+  width:130px;height:130px;border-radius:50%;
   transform:translate(-50%,-50%);
-  background:var(--c);
   pointer-events:none;
+  z-index:5;
+  background:var(--c);
+  box-shadow:0 0 36px rgba(255,255,255,.14);
+  transition:opacity .28s, transform .28s, filter .28s;
 }
 
-/* ARO EXTERIOR */
+/* ARO exterior */
 .dot::before{
   content:"";
-  position:absolute;
-  inset:-16px;
+  position:absolute; inset:-16px;
   border-radius:50%;
   background:conic-gradient(
     from 0deg,
-    var(--c) 0 60deg,
-    transparent 60deg 150deg,
-    var(--c) 150deg 210deg,
-    transparent 210deg 360deg
+    var(--c) 0 70deg,
+    transparent 70deg 175deg,
+    var(--c) 175deg 255deg,
+    transparent 255deg 360deg
   );
   -webkit-mask:radial-gradient(circle,transparent 60%,#000 61%);
   mask:radial-gradient(circle,transparent 60%,#000 61%);
-  opacity:.9;
+  opacity:.92;
+  transform:rotate(0deg);
 }
 
-/* ARO INTERIOR */
+/* ARO interior */
 .dot::after{
   content:"";
-  position:absolute;
-  inset:-8px;
+  position:absolute; inset:-8px;
   border-radius:50%;
   background:conic-gradient(
-    from 30deg,
-    transparent 0 40deg,
-    var(--c) 40deg 90deg,
-    transparent 90deg 200deg,
-    var(--c) 200deg 250deg,
-    transparent 250deg 360deg
+    from 25deg,
+    transparent 0 45deg,
+    var(--c) 45deg 100deg,
+    transparent 100deg 220deg,
+    var(--c) 220deg 270deg,
+    transparent 270deg 360deg
   );
   -webkit-mask:radial-gradient(circle,transparent 68%,#000 69%);
   mask:radial-gradient(circle,transparent 68%,#000 69%);
-  opacity:.6;
+  opacity:.62;
+  transform:rotate(0deg);
 }
 
-/* ANIMACIÓN */
-.dot.running::before{
-  animation:spin 0.65s linear infinite;
-}
-.dot.running::after{
-  animation:spinReverse 0.75s linear infinite;
-}
+/* Animación durante los 4 segundos */
+.dot.running::before{ animation:ringSpin .65s linear infinite, ringBreathe .9s ease-in-out infinite; }
+.dot.running::after { animation:ringSpinReverse .72s linear infinite, ringBreathe2 .95s ease-in-out infinite; }
 
-@keyframes spin{
-  to{ transform:rotate(360deg); }
-}
-@keyframes spinReverse{
-  to{ transform:rotate(-360deg); }
-}
+@keyframes ringSpin{ to{ transform:rotate(360deg); } }
+@keyframes ringSpinReverse{ to{ transform:rotate(-360deg); } }
+@keyframes ringBreathe{ 0%,100%{ filter:brightness(1); } 50%{ filter:brightness(1.12); } }
+@keyframes ringBreathe2{ 0%,100%{ opacity:.45; } 50%{ opacity:.75; } }
 
-/* PERDEDOR */
+/* Perdedor */
 .dot.lose{
   opacity:0;
-  transform:translate(-50%,-50%) scale(.8);
-  transition:.3s;
+  transform:translate(-50%,-50%) scale(.78);
+  filter:blur(2px) brightness(.9);
 }
 
-/* GANADOR */
+/* Ganador: donut negro con borde de color */
+@keyframes winPop{
+  0%{transform:translate(-50%,-50%) scale(1.18)}
+  100%{transform:translate(-50%,-50%) scale(1.05)}
+}
 .dot.win{
   background:#000 !important;
+  box-shadow:none;
+  opacity:1;
+  animation:winPop .22s ease-out forwards;
 }
-.dot.win::before,
+.dot.win::before{ opacity:1; }
 .dot.win::after{
   opacity:1;
+  -webkit-mask:none; mask:none;
+  background:transparent;
+  inset:0;border-radius:50%;
+  box-shadow: inset 0 0 0 10px var(--c), inset 0 0 0 18px #000;
 }
 </style>
 </head>
 
 <body>
+<div id="colorFill"></div>
+
+<div id="topbar">
+  <button id="winBtn" aria-label="Selector">1F</button>
+  <button id="helpBtn" aria-label="Ayuda">?</button>
+</div>
+
+<div id="state">esperando</div>
+<div id="hint">8 gana · W pierde · 7 gana · 9 pierde</div>
+
+<div id="modalOverlay" role="dialog" aria-modal="true">
+  <div id="modal">
+    <div id="row">
+      <button class="stepBtn" id="minus" aria-label="Menos">−</button>
+      <div id="count">1</div>
+      <button class="stepBtn" id="plus" aria-label="Más">+</button>
+    </div>
+    <div id="seg">
+      <button class="segBtn active" id="segFingers">Fingers</button>
+      <button class="segBtn" id="segGroups">Groups</button>
+    </div>
+  </div>
+</div>
+
 <div id="zone"></div>
 
 <script>
 (() => {
   const zone = document.getElementById("zone");
+  const colorFill = document.getElementById("colorFill");
+  const hintEl = document.getElementById("hint");
+  const stateEl = document.getElementById("state");
+
+  // UI modal
+  const winBtn = document.getElementById("winBtn");
+  const helpBtn = document.getElementById("helpBtn");
+  const overlay = document.getElementById("modalOverlay");
+  const minusBtn = document.getElementById("minus");
+  const plusBtn = document.getElementById("plus");
+  const countEl = document.getElementById("count");
+  const segFingers = document.getElementById("segFingers");
+  const segGroups = document.getElementById("segGroups");
+  const modal = document.getElementById("modal");
+
   const MAX = 5;
   const ROUND_MS = 4000;
-  const COLORS = [
-    "#ff3b30","#ff9500","#ffcc00",
-    "#34c759","#00c7be",
-    "#007aff","#5856d6",
-    "#af52de","#ff2d55"
-  ];
+  const FILL_MS = 5000;
+  const COLORS = ["#ff3b30","#ff9500","#ffcc00","#34c759","#00c7be","#007aff","#5856d6","#af52de","#ff2d55","#ff6f00"];
 
+  // selectorValue:
+  // fingers -> nº ganadores (1-4)
+  // groups  -> nº grupos (1-4)
+  let selectorValue = 1;
+  let mode = "fingers"; // "fingers" | "groups"
+
+  // id -> {x,y,taps,color,path:[],eightLocked,wLocked}
   const fingers = new Map();
   const dots = new Map();
+
   let state = "waiting";
   let timer = null;
+  let lastCount = 0;
 
   const rand = n => Math.floor(Math.random()*n);
+  const shuffle = a => { a=a.slice(); for(let i=a.length-1;i;i--){ const j=rand(i+1); [a[i],a[j]]=[a[j],a[i]]; } return a; };
+
+  function setAccent(){
+    const accent = (mode==="groups")
+      ? getComputedStyle(document.documentElement).getPropertyValue("--orange").trim()
+      : getComputedStyle(document.documentElement).getPropertyValue("--green").trim();
+    modal.style.setProperty("--accent", accent);
+    winBtn.style.background = (mode==="groups") ? "var(--orange)" : "var(--green)";
+  }
+
+  function setHiddenTextColor(color){
+    hintEl.style.color = color;
+    stateEl.style.color = color;
+  }
+  function setHintColorWhenFill(on, color){
+    setHiddenTextColor(on ? (color || "#000") : "#000");
+  }
 
   function ensureDot(id){
     if(dots.has(id)) return dots.get(id);
@@ -132,7 +264,6 @@ html,body{
     dots.set(id,d);
     return d;
   }
-
   function removeDot(id){
     if(dots.has(id)){
       dots.get(id).remove();
@@ -140,81 +271,345 @@ html,body{
     }
   }
 
-  function startRound(){
-    if(fingers.size < 2) return;
-    state = "running";
+  function ensureUniqueColorsStable(){
+    const used = new Set();
+    for(const f of fingers.values()) if(f.color) used.add(f.color);
+    const available = shuffle(COLORS.filter(c => !used.has(c)));
+    for(const f of fingers.values()){
+      if(!f.color){
+        f.color = available.length ? available.pop() : COLORS[rand(COLORS.length)];
+        used.add(f.color);
+      }
+    }
+  }
+
+  function renderLive(){
     for(const [id,f] of fingers){
       const el = ensureDot(id);
-      el.classList.add("running");
+      el.style.left = f.x+"px";
+      el.style.top  = f.y+"px";
+      el.style.setProperty("--c", f.color || COLORS[0]);
+      el.style.background = f.color || COLORS[0];
+      el.classList.toggle("running", state==="running");
+      el.classList.remove("win","lose");
     }
+    for(const [id] of dots){
+      if(!fingers.has(id)) removeDot(id);
+    }
+  }
+
+  function restartRoundTimer(){
+    if(state!=="running") return;
     clearTimeout(timer);
     timer = setTimeout(endRound, ROUND_MS);
   }
 
-  function endRound(){
-    state = "end";
-    const ids = [...fingers.keys()];
-    const winner = ids[rand(ids.length)];
+  function startRound(){
+    if(fingers.size < 2) return;
+    state = "running";
+    stateEl.textContent = "jugando";
+    // reset por ronda (8/W no persisten)
+    for(const f of fingers.values()){
+      f.taps = 0;
+      f.path = [];
+      f.eightLocked = false;
+      f.wLocked = false;
+    }
+    ensureUniqueColorsStable();
+    renderLive();
+    clearTimeout(timer);
+    timer = setTimeout(endRound, ROUND_MS);
+  }
 
-    for(const id of ids){
-      const el = dots.get(id);
-      if(!el) continue;
-      el.classList.remove("running");
-      el.classList.add(id === winner ? "win" : "lose");
+  // 8 gana (suave)
+  function isEight(path){
+    if(path.length < 14) return false;
+    let minX=Infinity,maxX=-Infinity,minY=Infinity,maxY=-Infinity;
+    for(const p of path){ minX=Math.min(minX,p.x); maxX=Math.max(maxX,p.x); minY=Math.min(minY,p.y); maxY=Math.max(maxY,p.y); }
+    const w=maxX-minX, h=maxY-minY, size=Math.max(w,h);
+    if(size < 70) return false;
+
+    let turns=0;
+    for(let i=2;i<path.length;i++){
+      const aY = path[i-2].y - path[i-1].y;
+      const bY = path[i-1].y - path[i].y;
+      if(aY*bY < 0) turns++;
+    }
+    if(turns < 6) return false;
+
+    const cx=(minX+maxX)/2, cy=(minY+maxY)/2;
+    let crosses=0;
+    const r = Math.min(w,h)*0.14;
+    for(const p of path){
+      if(Math.hypot(p.x-cx,p.y-cy) < r) crosses++;
+    }
+    return crosses >= 2;
+  }
+
+  // W pierde (suave)
+  function isW(path){
+    if(path.length < 10) return false;
+    let minX=Infinity,maxX=-Infinity,minY=Infinity,maxY=-Infinity;
+    for(const p of path){ minX=Math.min(minX,p.x); maxX=Math.max(maxX,p.x); minY=Math.min(minY,p.y); maxY=Math.max(maxY,p.y); }
+    const size=Math.max(maxX-minX, maxY-minY);
+    if(size < 70) return false;
+
+    let changes=0;
+    for(let i=2;i<path.length;i++){
+      const a=path[i-2].y - path[i-1].y;
+      const b=path[i-1].y - path[i].y;
+      if(a*b < 0) changes++;
+    }
+    return changes >= 3;
+  }
+
+  function trackAndLockIfNeeded(f){
+    if(!f || f.eightLocked || f.wLocked) return;
+    f.path.push({x:f.x,y:f.y});
+    if(isEight(f.path)){ f.eightLocked=true; f.wLocked=false; f.path=f.path.slice(-80); return; }
+    if(isW(f.path)){ f.wLocked=true; f.eightLocked=false; f.path=f.path.slice(-80); return; }
+  }
+
+  function pickWinners(ids,k){
+    const pool = ids.slice();
+    const out = [];
+    const want = Math.min(k, pool.length);
+    for(let i=0;i<want;i++){
+      const idx = rand(pool.length);
+      out.push(pool[idx]);
+      pool.splice(idx,1);
+    }
+    return out;
+  }
+
+  function assignGroups(ids, groupCount){
+    const s = shuffle(ids);
+    const groups = Array.from({length: groupCount}, () => []);
+    let gi=0;
+    for(const id of s){
+      groups[gi].push(id);
+      gi = (gi+1) % groupCount;
+    }
+    return groups;
+  }
+
+  function setFillFromColors(colors){
+    if(colors.length<=1) colorFill.style.background = colors[0] || "black";
+    else{
+      const stops = colors.map((c,i)=>`${c} ${Math.round(i/(colors.length-1)*100)}%`).join(", ");
+      colorFill.style.background = `linear-gradient(135deg, ${stops})`;
     }
   }
 
-  zone.addEventListener("touchstart", e => {
+  function endRound(){
+    state = "fin";
+    stateEl.textContent = "fin";
+
+    const entries = [...fingers.entries()];
+    const idsAll = entries.map(([id])=>id);
+
+    const eights = entries.filter(([_,f])=>f.eightLocked).map(([id])=>id);
+    const sevens = entries.filter(([_,f])=>f.taps===7).map(([id])=>id);
+    const banned9 = entries.filter(([_,f])=>f.taps===9).map(([id])=>id);
+    const bannedW = entries.filter(([_,f])=>f.wLocked).map(([id])=>id);
+    const banned = new Set([...banned9, ...bannedW]);
+
+    let survivors = [];
+
+    if(mode==="fingers"){
+      const wanted = selectorValue;
+
+      if(eights.length) survivors = pickWinners(eights, wanted);
+      else if(sevens.length) survivors = pickWinners(sevens, wanted);
+      else{
+        const allowed = idsAll.filter(id=>!banned.has(id));
+        survivors = allowed.length ? pickWinners(allowed, wanted) : pickWinners(idsAll, wanted);
+      }
+    }else{
+      const groupCount = selectorValue;
+      const allowed = idsAll.filter(id=>!banned.has(id));
+      const pool = allowed.length ? allowed : idsAll;
+
+      const groups = assignGroups(pool, groupCount);
+      let winnerGroupIndex = rand(groups.length);
+
+      // si hay 8 o 7, intenta caer en su grupo
+      const target8 = eights.find(id=>pool.includes(id));
+      const target7 = sevens.find(id=>pool.includes(id));
+      const target = target8 || target7;
+      if(target){
+        for(let i=0;i<groups.length;i++){
+          if(groups[i].includes(target)){ winnerGroupIndex=i; break; }
+        }
+      }
+      survivors = groups[winnerGroupIndex].slice();
+    }
+
+    const winSet = new Set(survivors);
+
+    for(const [id] of fingers){
+      const el = dots.get(id);
+      if(!el) continue;
+      el.classList.remove("running");
+      el.classList.add(winSet.has(id) ? "win" : "lose");
+    }
+
+    const winColors = survivors.map(id=>fingers.get(id)?.color).filter(Boolean);
+    setFillFromColors(winColors);
+    colorFill.classList.add("on");
+    setHintColorWhenFill(true, winColors[0] || "#000");
+
+    clearTimeout(timer);
+    timer = setTimeout(() => {
+      colorFill.classList.remove("on");
+      setHintColorWhenFill(false);
+
+      // desaparecen no-ganadores
+      for(const [id] of dots){
+        if(!winSet.has(id)) removeDot(id);
+      }
+
+      state = "waiting";
+      stateEl.textContent = "esperando";
+
+      // limpia clases en los que siguen tocando
+      for(const [id] of fingers){
+        const el = dots.get(id);
+        if(el) el.classList.remove("win","lose","running");
+      }
+      renderLive();
+    }, FILL_MS);
+  }
+
+  // ---- Touch logic (contador 4s se reinicia si entra o sale un dedo) ----
+  zone.addEventListener("touchstart", e=>{
     e.preventDefault();
+    let changed=false;
 
     for(const t of e.changedTouches){
-      if(fingers.size >= MAX) break;
       const id = t.identifier;
-      if(!fingers.has(id)){
-        fingers.set(id,{
-          x:t.clientX,
-          y:t.clientY,
-          color:COLORS[fingers.size % COLORS.length]
-        });
+      if(!fingers.has(id) && fingers.size < MAX){
+        fingers.set(id,{x:t.clientX,y:t.clientY,taps:0,color:null,path:[],eightLocked:false,wLocked:false});
+        changed=true;
       }
       const f = fingers.get(id);
-      f.x = t.clientX;
-      f.y = t.clientY;
-
-      const el = ensureDot(id);
-      el.style.left = f.x+"px";
-      el.style.top = f.y+"px";
-      el.style.setProperty("--c",f.color);
-    }
-
-    if(state === "waiting" && fingers.size >= 2){
-      startRound();
-    }
-  },{passive:false});
-
-  zone.addEventListener("touchmove", e => {
-    e.preventDefault();
-    for(const t of e.changedTouches){
-      const f = fingers.get(t.identifier);
-      if(!f) continue;
-      f.x = t.clientX;
-      f.y = t.clientY;
-      const el = dots.get(t.identifier);
-      if(el){
-        el.style.left = f.x+"px";
-        el.style.top = f.y+"px";
+      if(f){
+        f.x=t.clientX; f.y=t.clientY;
+        if(state==="running"){ f.taps++; trackAndLockIfNeeded(f); }
       }
     }
+
+    if(state==="waiting" && lastCount<2 && fingers.size>=2) startRound();
+
+    if(changed){
+      ensureUniqueColorsStable();
+      if(state==="running") restartRoundTimer();
+    }
+
+    lastCount=fingers.size;
+    if(state!=="fin") renderLive();
   },{passive:false});
 
-  zone.addEventListener("touchend", e => {
+  zone.addEventListener("touchmove", e=>{
     e.preventDefault();
+    if(state!=="running") {
+      // igualmente actualiza posiciones
+      for(const t of e.changedTouches){
+        const f=fingers.get(t.identifier);
+        if(!f) continue;
+        f.x=t.clientX; f.y=t.clientY;
+      }
+      renderLive();
+      return;
+    }
+
     for(const t of e.changedTouches){
-      fingers.delete(t.identifier);
-      removeDot(t.identifier);
+      const f=fingers.get(t.identifier);
+      if(!f) continue;
+      f.x=t.clientX; f.y=t.clientY;
+      if(!(f.eightLocked || f.wLocked)) trackAndLockIfNeeded(f);
+    }
+    renderLive();
+  },{passive:false});
+
+  zone.addEventListener("touchend", e=>{
+    e.preventDefault();
+    let changed=false;
+
+    for(const t of e.changedTouches){
+      if(fingers.has(t.identifier)){
+        fingers.delete(t.identifier);
+        removeDot(t.identifier);
+        changed=true;
+      }
+    }
+
+    lastCount=fingers.size;
+
+    if(changed && state==="running"){
+      ensureUniqueColorsStable();
+      restartRoundTimer();
+      renderLive();
     }
   },{passive:false});
 
+  zone.addEventListener("touchcancel", e=>{
+    e.preventDefault();
+    let changed=false;
+
+    for(const t of e.changedTouches){
+      if(fingers.has(t.identifier)){
+        fingers.delete(t.identifier);
+        removeDot(t.identifier);
+        changed=true;
+      }
+    }
+
+    lastCount=fingers.size;
+
+    if(changed && state==="running"){
+      ensureUniqueColorsStable();
+      restartRoundTimer();
+      renderLive();
+    }
+  },{passive:false});
+
+  // ---- Modal UI ----
+  function updateUI(){
+    countEl.textContent = String(selectorValue);
+    winBtn.textContent = String(selectorValue) + "F";
+    setAccent();
+  }
+  function openModal(){ overlay.classList.add("on"); }
+  function closeModal(){ overlay.classList.remove("on"); }
+
+  winBtn.addEventListener("click",(e)=>{ e.preventDefault(); openModal(); });
+  helpBtn.addEventListener("click",(e)=>{ e.preventDefault(); openModal(); });
+  overlay.addEventListener("click",(e)=>{ if(e.target===overlay) closeModal(); });
+
+  minusBtn.addEventListener("click",(e)=>{ e.preventDefault(); selectorValue=Math.max(1, selectorValue-1); updateUI(); });
+  plusBtn.addEventListener("click",(e)=>{ e.preventDefault(); selectorValue=Math.min(4, selectorValue+1); updateUI(); });
+
+  segFingers.addEventListener("click",(e)=>{
+    e.preventDefault();
+    mode="fingers";
+    segFingers.classList.add("active");
+    segGroups.classList.remove("active");
+    updateUI();
+  });
+  segGroups.addEventListener("click",(e)=>{
+    e.preventDefault();
+    mode="groups";
+    segGroups.classList.add("active");
+    segFingers.classList.remove("active");
+    updateUI();
+  });
+
+  // init
+  modal.style.setProperty("--accent", "var(--green)");
+  setHintColorWhenFill(false);
+  stateEl.textContent="esperando";
+  updateUI();
 })();
 </script>
 </body>
