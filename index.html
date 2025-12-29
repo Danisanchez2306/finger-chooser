@@ -114,7 +114,7 @@ html, body{
   const MAX=5, ROUND_MS=4000, FILL_MS=5000;
   const COLORS=["#ff3b30","#ff9500","#ffcc00","#34c759","#00c7be","#007aff","#5856d6","#af52de","#ff2d55","#ff6f00"];
 
-  // id -> {x,y,taps,color,path:[], eightLocked:boolean}
+  // id -> {x,y,taps,color,path:[], eightLocked:boolean, wLocked:boolean}
   const fingers=new Map();
   const dotEls=new Map();
   let state="waiting", timer=null, lastCount=0;
@@ -129,7 +129,7 @@ html, body{
   };
   const removeDot=id=>{ if(dotEls.has(id)){dotEls.get(id).remove(); dotEls.delete(id)} };
 
-  // ✅ Mantiene colores ya asignados y solo asigna a dedos nuevos (sin repetir)
+  // Mantiene colores ya asignados y solo asigna a dedos nuevos (sin repetir)
   function ensureUniqueColorsStable(){
     const used = new Set();
     for (const f of fingers.values()){
@@ -166,11 +166,12 @@ html, body{
     if(fingers.size<2) return;
     state="running"; stateEl.textContent="jugando";
 
-    // OJO: NO reiniciamos color ni eightLocked de quien ya exista
+    // ✅ NO se mantienen entre rondas
     for(const f of fingers.values()){
       f.taps = 0;
       f.path = [];
       f.eightLocked = false;
+      f.wLocked = false;
     }
 
     ensureUniqueColorsStable();
@@ -178,18 +179,6 @@ html, body{
 
     clearTimeout(timer);
     timer=setTimeout(endRound,ROUND_MS);
-  }
-
-  // --- Detección W (vetar) ---
-  function isW(path){
-    if(path.length < 10) return false;
-    let changes=0;
-    for(let i=2;i<path.length;i++){
-      const a=path[i-2].y - path[i-1].y;
-      const b=path[i-1].y - path[i].y;
-      if(a*b < 0) changes++;
-    }
-    return changes >= 4;
   }
 
   // --- Detección 8 (no muy estricta) ---
@@ -205,7 +194,7 @@ html, body{
     const size=Math.max(w,h);
     if(size < 70) return false;
 
-    // cambios verticales (zigzag de los dos bucles)
+    // cambios verticales (dos bucles)
     let turns=0;
     for(let i=2;i<path.length;i++){
       const aY = path[i-2].y - path[i-1].y;
@@ -224,6 +213,32 @@ html, body{
     if(crosses < 2) return false;
 
     return true;
+  }
+
+  // --- Detección W (no muy estricta) + tamaño mínimo ---
+  function isW(path){
+    if(path.length < 10) return false;
+
+    let minX=Infinity,maxX=-Infinity,minY=Infinity,maxY=-Infinity;
+    for(const p of path){
+      minX=Math.min(minX,p.x); maxX=Math.max(maxX,p.x);
+      minY=Math.min(minY,p.y); maxY=Math.max(maxY,p.y);
+    }
+    const w=maxX-minX, h=maxY-minY;
+    const size=Math.max(w,h);
+    if(size < 70) return false;
+
+    // “picos”: cambios de dirección en Y
+    let changes=0;
+    for(let i=2;i<path.length;i++){
+      const a=path[i-2].y - path[i-1].y;
+      const b=path[i-1].y - path[i].y;
+      if(a*b < 0) changes++;
+    }
+
+    // No muy estricta: con 3 cambios claros ya vale
+    // (una W típica dará 4+)
+    return changes >= 3;
   }
 
   function pickWinners(ids,k){
@@ -264,9 +279,10 @@ html, body{
     const sevens = entries.filter(([_,f])=>f.taps===7).map(([id])=>id);
     const banned9= entries.filter(([_,f])=>f.taps===9).map(([id])=>id);
 
-    // W por dibujo (si no está bloqueado como 8, porque un 8 podría tener zigzags raros)
-    const bannedW= entries.filter(([_,f])=>!f.eightLocked && isW(f.path)).map(([id])=>id);
+    // W bloqueada (solo ronda)
+    const bannedW= entries.filter(([_,f])=>f.wLocked === true).map(([id])=>id);
 
+    // Si alguien bloqueó W, nunca gana; si bloqueó 8, gana prioritario
     const banned = new Set([...bannedW, ...banned9]);
 
     let winners=[];
@@ -293,7 +309,7 @@ html, body{
     setFillFromColors(winColors);
     colorFill.classList.add("on");
 
-    // Texto: mismo color que el fondo (usamos el primer ganador)
+    // Texto: mismo color que el fondo mientras está el fill
     setHintColorWhenFill(true, winColors[0] || "#000");
 
     clearTimeout(timer);
@@ -314,6 +330,29 @@ html, body{
     }, FILL_MS);
   }
 
+  // helper: grabar puntos y bloquear 8/W si se detecta
+  function trackAndLockIfNeeded(f){
+    if(!f || f.eightLocked || f.wLocked) return;
+
+    f.path.push({x:f.x,y:f.y});
+
+    // prioridad: si detecta 8, bloquea 8 y deja de grabar
+    if(isEight(f.path)){
+      f.eightLocked = true;
+      f.wLocked = false;
+      f.path = f.path.slice(-80);
+      return;
+    }
+
+    // si detecta W, bloquea W y deja de grabar
+    if(isW(f.path)){
+      f.wLocked = true;
+      f.eightLocked = false;
+      f.path = f.path.slice(-80);
+      return;
+    }
+  }
+
   // --- Touch events ---
   zone.addEventListener("touchstart", e=>{
     e.preventDefault();
@@ -323,7 +362,7 @@ html, body{
       const id=t.identifier;
 
       if(!fingers.has(id) && fingers.size < MAX){
-        fingers.set(id, {x:t.clientX, y:t.clientY, taps:0, color:null, path:[], eightLocked:false});
+        fingers.set(id, {x:t.clientX, y:t.clientY, taps:0, color:null, path:[], eightLocked:false, wLocked:false});
         changed=true;
       }
 
@@ -333,29 +372,16 @@ html, body{
 
         if(state==="running"){
           f.taps++;
-
-          // ✅ si ya bloqueó el 8, no seguimos grabando
-          if(!f.eightLocked){
-            f.path.push({x:f.x,y:f.y});
-
-            // ✅ en cuanto se detecta el 8, se BLOQUEA y ya no se degrada
-            if(isEight(f.path)){
-              f.eightLocked = true;
-              // recortamos para que no siga creciendo
-              f.path = f.path.slice(-60);
-            }
-          }
+          trackAndLockIfNeeded(f); // ✅ punto inicial + lock live
         }
       }
     }
 
-    // empieza al llegar a 2 dedos
     if(state==="waiting" && lastCount<2 && fingers.size>=2) startRound();
 
-    // si entra alguien nuevo durante running: no resetea tu 8, solo reinicia timer (como antes)
     if(changed){
       ensureUniqueColorsStable();
-      if(state==="running") restartRoundTimer();
+      if(state==="running") restartRoundTimer(); // NO resetea 8/W ya hechos
     }
 
     lastCount=fingers.size;
@@ -372,16 +398,10 @@ html, body{
 
       f.x=t.clientX; f.y=t.clientY;
 
-      // ✅ si ya bloqueó 8, ignorar movimiento
-      if(f.eightLocked) continue;
+      // ✅ si ya bloqueó 8 o W, ignorar movimiento
+      if(f.eightLocked || f.wLocked) continue;
 
-      f.path.push({x:f.x, y:f.y});
-
-      // ✅ detectar y bloquear 8 “en vivo”
-      if(isEight(f.path)){
-        f.eightLocked = true;
-        f.path = f.path.slice(-60);
-      }
+      trackAndLockIfNeeded(f);
     }
     renderLive();
   }, {passive:false});
@@ -394,13 +414,9 @@ html, body{
       if(fingers.has(t.identifier)){
         const f=fingers.get(t.identifier);
 
-        // ✅ punto final solo si no estaba bloqueado (si estaba bloqueado, da igual)
-        if(state==="running" && f && !f.eightLocked){
-          f.path.push({x:f.x, y:f.y});
-          if(isEight(f.path)){
-            f.eightLocked = true;
-            f.path = f.path.slice(-60);
-          }
+        // punto final (si no estaba bloqueado)
+        if(state==="running" && f && !(f.eightLocked || f.wLocked)){
+          trackAndLockIfNeeded(f);
         }
 
         fingers.delete(t.identifier);
@@ -425,12 +441,8 @@ html, body{
     for(const t of e.changedTouches){
       if(fingers.has(t.identifier)){
         const f=fingers.get(t.identifier);
-        if(state==="running" && f && !f.eightLocked){
-          f.path.push({x:f.x, y:f.y});
-          if(isEight(f.path)){
-            f.eightLocked = true;
-            f.path = f.path.slice(-60);
-          }
+        if(state==="running" && f && !(f.eightLocked || f.wLocked)){
+          trackAndLockIfNeeded(f);
         }
 
         fingers.delete(t.identifier);
