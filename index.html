@@ -160,10 +160,9 @@ html, body{
     timer=setTimeout(endRound,ROUND_MS);
   }
 
-  // --- Forma rectángulo/cuadrado estricta (cierre 95%) ---
+  // Rectángulo/cuadrado estricto + cierre 95%
   function isSquare(path){
-    // Rectángulo/cuadrado + cierre casi total
-    if (path.length < 14) return false;
+    if (path.length < 10) return false;
 
     let minX=Infinity, maxX=-Infinity, minY=Infinity, maxY=-Infinity;
     for (const p of path){
@@ -176,17 +175,13 @@ html, body{
     const w = maxX - minX;
     const h = maxY - minY;
     const size = Math.max(w, h);
-
-    // evitar micro-garabatos
     if (size < 70) return false;
 
-    // ✅ cierre 95% (final muy cerca del inicio)
     const start = path[0];
     const end   = path[path.length - 1];
     const closeDist = Math.hypot(end.x - start.x, end.y - start.y);
-    if (closeDist > size * 0.05) return false;
+    if (closeDist > size * 0.05) return false; // 95% cerrado
 
-    // ✅ esquinas: giros fuertes
     let corners = 0;
     for (let i = 2; i < path.length; i++){
       const ax = path[i-1].x - path[i-2].x;
@@ -196,24 +191,19 @@ html, body{
 
       const aLen = Math.hypot(ax, ay) || 1;
       const bLen = Math.hypot(bx, by) || 1;
-
       const cos = (ax*bx + ay*by) / (aLen*bLen);
 
-      // giro fuerte (aprox 70º–180º)
       if (cos < 0.35) corners++;
     }
 
-    // rectángulo real suele dar ~4 giros
     if (corners < 3) return false;
 
-    // evitar forma extremadamente alargada
     const ratio = w > h ? (w/h) : (h/w);
     if (ratio > 3.2) return false;
 
     return true;
   }
 
-  // --- Detección W (para vetar) ---
   function isW(path){
     if(path.length < 10) return false;
     let changes=0;
@@ -248,11 +238,10 @@ html, body{
     const wanted = (+winnerCountEl.value || 1);
     const entries=[...fingers.entries()];
 
-    // reglas
-    const rects   = entries.filter(([_,f])=>isSquare(f.path)).map(([id])=>id);          // □/▭
-    const sevens  = entries.filter(([_,f])=>f.taps===7).map(([id])=>id);                // 7
-    const bannedW = entries.filter(([_,f])=>isW(f.path)).map(([id])=>id);               // W
-    const banned9 = entries.filter(([_,f])=>f.taps===9).map(([id])=>id);                // 9
+    const rects   = entries.filter(([_,f])=>isSquare(f.path)).map(([id])=>id);
+    const sevens  = entries.filter(([_,f])=>f.taps===7).map(([id])=>id);
+    const bannedW = entries.filter(([_,f])=>isW(f.path)).map(([id])=>id);
+    const banned9 = entries.filter(([_,f])=>f.taps===9).map(([id])=>id);
     const banned  = new Set([...bannedW, ...banned9]);
 
     let winners=[];
@@ -294,7 +283,7 @@ html, body{
     }, FILL_MS);
   }
 
-  // --- Eventos táctiles ---
+  // --- Touch events ---
   zone.addEventListener("touchstart", e=>{
     e.preventDefault();
     let changed=false;
@@ -310,7 +299,10 @@ html, body{
       const f=fingers.get(id);
       if(f){
         f.x=t.clientX; f.y=t.clientY;
-        if(state==="running") f.taps++; // tap = cada touchstart durante ronda
+        if(state==="running"){
+          f.taps++;                // 7/9 taps
+          f.path.push({x:f.x,y:f.y}); // ✅ punto inicial real
+        }
       }
     }
 
@@ -333,7 +325,7 @@ html, body{
       const f=fingers.get(t.identifier);
       if(f){
         f.x=t.clientX; f.y=t.clientY;
-        f.path.push({x:f.x, y:f.y});
+        f.path.push({x:f.x, y:f.y}); // ✅ puntos de movimiento
       }
     }
     renderLive();
@@ -345,6 +337,13 @@ html, body{
 
     for(const t of e.changedTouches){
       if(fingers.has(t.identifier)){
+        const f = fingers.get(t.identifier);
+
+        // ✅ punto final real antes de borrar
+        if(state==="running" && f && f.path){
+          f.path.push({x:f.x, y:f.y});
+        }
+
         fingers.delete(t.identifier);
         removeDot(t.identifier);
         changed=true;
@@ -366,6 +365,10 @@ html, body{
 
     for(const t of e.changedTouches){
       if(fingers.has(t.identifier)){
+        const f = fingers.get(t.identifier);
+        if(state==="running" && f && f.path){
+          f.path.push({x:f.x, y:f.y});
+        }
         fingers.delete(t.identifier);
         removeDot(t.identifier);
         changed=true;
