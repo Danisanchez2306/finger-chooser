@@ -1,277 +1,499 @@
 <!doctype html>
 <html lang="es">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<title>Finger Chooser</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <title>Finger Chooser</title>
 
-<style>
-html,body{
-  margin:0;
-  height:100%;
-  background:black;
-  font-family:-apple-system,system-ui,sans-serif;
-  overflow:hidden;
-}
-#zone{height:100%;touch-action:none}
+  <style>
+    html, body{
+      margin:0;
+      height:100%;
+      background:black;
+      font-family:-apple-system,system-ui,sans-serif;
+      overflow:hidden;
+      color:white;
+    }
 
-#colorFill{
-  position:fixed;inset:0;
-  opacity:0;transition:.25s;
-  z-index:1;pointer-events:none
-}
-#colorFill.on{opacity:1}
+    #zone{
+      height:100%;
+      touch-action:none;
+      user-select:none;
+      -webkit-user-select:none;
+    }
 
-#topbar{
-  position:fixed;top:12px;left:12px;right:12px;
-  display:flex;justify-content:space-between;
-  z-index:10
-}
-#state{color:white;font-size:18px}
+    /* Fondo final (color / degradado) */
+    #colorFill{
+      position:fixed;
+      inset:0;
+      opacity:0;
+      transition: opacity 220ms ease;
+      z-index:1;
+      pointer-events:none;
+    }
+    #colorFill.on{ opacity:1; }
 
-#controls{
-  background:rgba(255,255,255,.1);
-  padding:10px 12px;
-  border-radius:16px
-}
+    /* Barra superior */
+    #topbar{
+      position:fixed;
+      top:12px;
+      left:12px;
+      right:12px;
+      z-index:10;
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      gap:12px;
+    }
 
-#hint{
-  position:fixed;
-  right:10px;
-  bottom:10px;
-  font-size:11px;
-  color:black;
-  opacity:.6;
-  z-index:20;
-  user-select:none;
-}
+    #state{
+      font-size:18px;
+      opacity:0.95;
+      text-transform: lowercase;
+    }
 
-.dot{
-  --c:#ff3b30;
-  position:fixed;
-  width:130px;height:130px;
-  border-radius:50%;
-  transform:translate(-50%,-50%);
-  pointer-events:none;
-  z-index:5;
-  transition:.25s
-}
+    #controls{
+      display:flex;
+      align-items:center;
+      gap:8px;
+      background:rgba(255,255,255,.10);
+      padding:10px 12px;
+      border-radius:16px;
+      backdrop-filter: blur(8px);
+    }
 
-/* ARO */
-.dot::before{
-  content:"";
-  position:absolute;
-  inset:-14px;
-  border-radius:50%;
-  background:conic-gradient(
-    var(--c) 0 70deg,
-    transparent 70 180deg,
-    var(--c) 180 250deg,
-    transparent 250 360deg
-  );
-  -webkit-mask:radial-gradient(circle,transparent 58%,#000 60%);
-}
-.dot.running::before{
-  animation:spin .7s linear infinite
-}
-@keyframes spin{to{transform:rotate(360deg)}}
+    #controls label{
+      font-size:14px;
+      opacity:0.9;
+    }
 
-/* PERDEDOR */
-.dot.lose{
-  opacity:0;
-  transform:translate(-50%,-50%) scale(.8)
-}
+    #winnerCount{
+      appearance:none;
+      -webkit-appearance:none;
+      border:1px solid rgba(255,255,255,.25);
+      background:rgba(0,0,0,.35);
+      color:white;
+      padding:8px 10px;
+      border-radius:12px;
+      font-size:14px;
+      outline:none;
+    }
 
-/* GANADOR */
-@keyframes pop{
-  from{transform:translate(-50%,-50%) scale(1.3)}
-  to{transform:translate(-50%,-50%) scale(1.05)}
-}
-.dot.win{
-  background:#000;
-  animation:pop .2s ease-out forwards
-}
-.dot.win::before{content:none}
-.dot.win::after{
-  content:"";
-  position:absolute;
-  inset:30px;
-  border-radius:50%;
-  box-shadow:
-    inset 0 0 0 10px var(--c),
-    inset 0 0 0 18px #000;
-}
-</style>
+    /* Texto discreto abajo derecha (negro, pequeño) */
+    #hint{
+      position:fixed;
+      right:10px;
+      bottom:10px;
+      font-size:11px;
+      color:#000;
+      opacity:.6;
+      z-index:20;
+      user-select:none;
+      -webkit-user-select:none;
+      pointer-events:none;
+    }
+
+    /* Círculo */
+    .dot{
+      --c: #ff3b30;
+
+      position:fixed;
+      width:130px;
+      height:130px;
+      border-radius:50%;
+      transform:translate(-50%,-50%);
+      pointer-events:none;
+      z-index:5;
+
+      box-shadow:0 0 40px rgba(255,255,255,.22);
+      opacity:0.95;
+
+      transition:
+        opacity 260ms ease,
+        transform 260ms ease,
+        filter 260ms ease;
+    }
+
+    /* ARO limpio estilo Chwazi */
+    .dot::before{
+      content:"";
+      position:absolute;
+      inset:-14px;
+      border-radius:50%;
+
+      background: conic-gradient(
+        from 0deg,
+        var(--c) 0deg, var(--c) 70deg,
+        transparent 70deg, transparent 180deg,
+        var(--c) 180deg, var(--c) 250deg,
+        transparent 250deg, transparent 360deg
+      );
+
+      -webkit-mask: radial-gradient(circle, transparent 58%, #000 60%);
+      mask: radial-gradient(circle, transparent 58%, #000 60%);
+      transform: rotate(0deg);
+      opacity: 0.98;
+    }
+
+    .dot.running::before{
+      animation: ringSpin 700ms linear infinite;
+    }
+    @keyframes ringSpin{ to { transform: rotate(360deg); } }
+
+    /* Perdedor: desaparece */
+    .dot.lose{
+      animation:none;
+      opacity:0;
+      transform:translate(-50%,-50%) scale(0.78);
+      filter: blur(2px) brightness(0.9);
+    }
+
+    /* Ganador: donut negro + anillos internos */
+    @keyframes winPop {
+      0%   { transform:translate(-50%,-50%) scale(1.25); }
+      100% { transform:translate(-50%,-50%) scale(1.05); }
+    }
+
+    .dot.win{
+      background:#000 !important;
+      box-shadow:none;
+      opacity:1;
+      animation: winPop 220ms ease-out forwards;
+    }
+
+    .dot.win::before{
+      content:none; /* quitamos el aro exterior giratorio al ganar */
+    }
+
+    .dot.win::after{
+      content:"";
+      position:absolute;
+      inset:30px; /* ajusta 28–34 si quieres */
+      border-radius:50%;
+      box-shadow:
+        inset 0 0 0 10px var(--c),
+        inset 0 0 0 18px #000;
+    }
+  </style>
 </head>
 
 <body>
-<div id="colorFill"></div>
+  <div id="colorFill"></div>
 
-<div id="topbar">
-  <div id="state">esperando</div>
-  <div id="controls">
-    <select id="winnerCount">
-      <option value="1">1</option>
-      <option value="2">2</option>
-      <option value="3">3</option>
-      <option value="4">4</option>
-    </select>
+  <div id="topbar">
+    <div id="state">esperando</div>
+
+    <div id="controls">
+      <label for="winnerCount">Ganadores</label>
+      <select id="winnerCount">
+        <option value="1" selected>1</option>
+        <option value="2">2</option>
+        <option value="3">3</option>
+        <option value="4">4</option>
+      </select>
+    </div>
   </div>
-</div>
 
-<!-- TEXTO DISCRETO -->
-<div id="hint">□ gana · W pierde</div>
+  <!-- Texto discreto -->
+  <div id="hint">7 gana · 9 pierde</div>
 
-<div id="zone"></div>
+  <div id="zone"></div>
 
 <script>
-const zone=document.getElementById("zone");
-const stateEl=document.getElementById("state");
-const colorFill=document.getElementById("colorFill");
-const winnerCountEl=document.getElementById("winnerCount");
+(() => {
+  const zone = document.getElementById("zone");
+  const stateEl = document.getElementById("state");
+  const winnerCountEl = document.getElementById("winnerCount");
+  const colorFill = document.getElementById("colorFill");
 
-const COLORS=["#ff3b30","#ff9500","#ffcc00","#34c759","#00c7be","#007aff","#5856d6","#af52de","#ff2d55","#ff6f00"];
-const MAX=5, ROUND=4000, FILL=5000;
+  const MAX = 5;
+  const ROUND_MS = 4000;
+  const FILL_MS = 5000;
 
-let fingers=new Map(), dots=new Map(), timer=null, state="waiting", last=0;
+  // Colores vivos (sin blanco/gris/negro)
+  const COLORS = [
+    "#ff3b30", "#ff9500", "#ffcc00", "#34c759", "#00c7be",
+    "#007aff", "#5856d6", "#af52de", "#ff2d55", "#ff6f00"
+  ];
 
-const rand=n=>Math.floor(Math.random()*n);
-const shuffle=a=>{a=[...a];for(let i=a.length-1;i;i--){let j=rand(i+1);[a[i],a[j]]=[a[j],a[i]]}return a};
+  // id -> {x,y,taps,color}
+  const fingers = new Map();
+  // id -> element
+  const dotEls = new Map();
 
-const ensureDot=id=>{
-  if(dots.has(id))return dots.get(id);
-  const d=document.createElement("div");
-  d.className="dot";
-  document.body.appendChild(d);
-  dots.set(id,d);
-  return d;
-};
-const removeDot=id=>{
-  if(dots.has(id)){dots.get(id).remove();dots.delete(id)}
-};
+  let state = "waiting"; // waiting | running | fin
+  let timer = null;
+  let lastCount = 0;
 
-function ensureColors(){
-  const ids=[...fingers.keys()];
-  const cols=shuffle(COLORS).slice(0,ids.length);
-  ids.forEach((id,i)=>fingers.get(id).color=cols[i]);
-}
+  const rand = (n) => Math.floor(Math.random() * n);
 
-function render(){
-  for(const [id,f] of fingers){
-    const d=ensureDot(id);
-    d.style.left=f.x+"px";
-    d.style.top=f.y+"px";
-    d.style.background=f.color;
-    d.style.setProperty("--c",f.color);
-    d.classList.toggle("running",state==="running");
-    d.classList.remove("win","lose");
-  }
-}
-
-function start(){
-  if(fingers.size<2)return;
-  state="running";
-  stateEl.textContent="jugando";
-  for(const f of fingers.values()){f.taps=0;f.path=[]}
-  ensureColors();
-  clearTimeout(timer);
-  timer=setTimeout(end,ROUND);
-}
-
-function isSquare(p){
-  if(p.length<8)return false;
-  let minX=Infinity,maxX=-Infinity,minY=Infinity,maxY=-Infinity;
-  p.forEach(pt=>{minX=Math.min(minX,pt.x);maxX=Math.max(maxX,pt.x);minY=Math.min(minY,pt.y);maxY=Math.max(maxY,pt.y)});
-  const w=maxX-minX,h=maxY-minY;
-  return Math.abs(w-h)<40;
-}
-
-function isW(p){
-  if(p.length<8)return false;
-  let changes=0;
-  for(let i=2;i<p.length;i++){
-    const a=p[i-2].y-p[i-1].y;
-    const b=p[i-1].y-p[i].y;
-    if(a*b<0)changes++;
-  }
-  return changes>=4;
-}
-
-function end(){
-  state="fin";
-  stateEl.textContent="fin";
-  const want=+winnerCountEl.value;
-  const entries=[...fingers.entries()];
-  const squares=entries.filter(([_,f])=>isSquare(f.path)).map(([id])=>id);
-  const banned=entries.filter(([_,f])=>isW(f.path)).map(([id])=>id);
-
-  let pool=squares.length?squares:entries.map(([id])=>id).filter(id=>!banned.includes(id));
-  if(!pool.length)pool=entries.map(([id])=>id);
-
-  pool=shuffle(pool).slice(0,want);
-  const win=new Set(pool);
-
-  for(const [id] of fingers){
-    const d=dots.get(id);
-    d.classList.remove("running");
-    d.classList.add(win.has(id)?"win":"lose");
-  }
-
-  const colors=pool.map(id=>fingers.get(id).color);
-  colorFill.style.background=colors.length>1
-    ?`linear-gradient(135deg,${colors.join(",")})`
-    :colors[0];
-  colorFill.classList.add("on");
-
-  setTimeout(()=>{
-    colorFill.classList.remove("on");
-    for(const [id] of dots)if(!win.has(id))removeDot(id);
-    state="waiting";
-    stateEl.textContent="esperando";
-    render();
-  },FILL);
-}
-
-zone.addEventListener("touchstart",e=>{
-  e.preventDefault();
-  let ch=false;
-  for(const t of e.changedTouches){
-    if(!fingers.has(t.identifier)&&fingers.size<MAX){
-      fingers.set(t.identifier,{x:t.clientX,y:t.clientY,taps:0,color:"#fff",path:[]});
-      ch=true;
+  const shuffle = (arr) => {
+    const a = arr.slice();
+    for (let i=a.length-1; i>0; i--){
+      const j = rand(i+1);
+      [a[i], a[j]] = [a[j], a[i]];
     }
-    const f=fingers.get(t.identifier);
-    if(f){
-      f.x=t.clientX;f.y=t.clientY;
-      if(state==="running")f.taps++;
+    return a;
+  };
+
+  // “best effort” (Android ok, iPhone normalmente no)
+  const vibrate = (pattern) => {
+    try { if (navigator.vibrate) navigator.vibrate(pattern); } catch(_) {}
+  };
+
+  const ensureDot = (id) => {
+    let el = dotEls.get(id);
+    if (el) return el;
+    el = document.createElement("div");
+    el.className = "dot";
+    document.body.appendChild(el);
+    dotEls.set(id, el);
+    return el;
+  };
+
+  const removeDot = (id) => {
+    const el = dotEls.get(id);
+    if (el) { el.remove(); dotEls.delete(id); }
+  };
+
+  // ✅ Colores únicos SIEMPRE (hasta 5)
+  function ensureUniqueColors(){
+    const ids = [...fingers.keys()];
+    const colors = shuffle(COLORS).slice(0, ids.length);
+    for (let i=0; i<ids.length; i++){
+      fingers.get(ids[i]).color = colors[i];
     }
   }
-  if(state==="waiting"&&last<2&&fingers.size>=2)start();
-  if(state==="running"&&ch){clearTimeout(timer);timer=setTimeout(end,ROUND)}
-  last=fingers.size;
-  render();
-},{passive:false});
 
-zone.addEventListener("touchmove",e=>{
-  e.preventDefault();
-  if(state!=="running")return;
-  for(const t of e.changedTouches){
-    const f=fingers.get(t.identifier);
-    if(f){f.x=t.clientX;f.y=t.clientY;f.path.push({x:f.x,y:f.y})}
-  }
-  render();
-},{passive:false});
+  function renderLive(){
+    for (const [id, f] of fingers){
+      const el = ensureDot(id);
 
-zone.addEventListener("touchend",e=>{
-  e.preventDefault();
-  let ch=false;
-  for(const t of e.changedTouches){
-    if(fingers.has(t.identifier)){fingers.delete(t.identifier);removeDot(t.identifier);ch=true}
+      el.style.left = f.x + "px";
+      el.style.top  = f.y + "px";
+
+      const c = f.color || COLORS[0];
+      el.style.background = c;
+      el.style.setProperty("--c", c);
+
+      el.classList.toggle("running", state === "running");
+      el.classList.remove("win","lose");
+    }
+
+    for (const [id] of dotEls){
+      if (!fingers.has(id)) removeDot(id);
+    }
   }
-  last=fingers.size;
-  if(state==="running"&&ch){clearTimeout(timer);timer=setTimeout(end,ROUND)}
-},{passive:false});
+
+  function restartRoundTimer(){
+    if (state !== "running") return;
+    clearTimeout(timer);
+    timer = setTimeout(endRound, ROUND_MS);
+  }
+
+  function startRound(){
+    if (fingers.size < 2) return;
+
+    state = "running";
+    stateEl.textContent = "jugando";
+
+    for (const f of fingers.values()) f.taps = 0;
+
+    ensureUniqueColors();
+    renderLive();
+
+    clearTimeout(timer);
+    timer = setTimeout(endRound, ROUND_MS);
+  }
+
+  function pickWinners(ids, k){
+    const pool = ids.slice();
+    const out = [];
+    const want = Math.min(k, pool.length);
+    for (let i=0; i<want; i++){
+      const idx = rand(pool.length);
+      out.push(pool[idx]);
+      pool.splice(idx, 1);
+    }
+    return out;
+  }
+
+  function setFillFromWinnerColors(colors){
+    if (colors.length <= 1){
+      colorFill.style.background = colors[0] || "black";
+    } else {
+      const stops = colors.map((c,i)=>{
+        const p = Math.round((i/(colors.length-1))*100);
+        return `${c} ${p}%`;
+      }).join(", ");
+      colorFill.style.background = `linear-gradient(135deg, ${stops})`;
+    }
+  }
+
+  function endRound(){
+    state = "fin";
+    stateEl.textContent = "fin";
+
+    const entries = [...fingers.entries()];
+    const wanted = parseInt(winnerCountEl.value || "1", 10);
+
+    // ✅ Truco 7/9
+    const seven   = entries.filter(([_,f]) => f.taps === 7).map(([id]) => id);
+    const allowed = entries.filter(([_,f]) => f.taps !== 9).map(([id]) => id);
+
+    let winners = [];
+    if (seven.length > 0){
+      winners = pickWinners(seven, wanted);
+      if (winners.length < wanted){
+        const rest = allowed.filter(id => !winners.includes(id));
+        winners = winners.concat(pickWinners(rest, wanted - winners.length));
+      }
+    } else {
+      if (allowed.length > 0) winners = pickWinners(allowed, wanted);
+      else if (entries.length > 0) winners = pickWinners(entries.map(([id])=>id), wanted);
+    }
+
+    const winSet = new Set(winners);
+
+    vibrate([30, 40, 30, 40, 60]);
+
+    // Ganadores/pierden
+    for (const [id] of fingers){
+      const el = dotEls.get(id);
+      if (!el) continue;
+      el.classList.remove("running");
+      if (winSet.has(id)) el.classList.add("win");
+      else el.classList.add("lose");
+    }
+
+    // Fondo 5s
+    const winColors = winners.map(id => fingers.get(id)?.color).filter(Boolean);
+    setFillFromWinnerColors(winColors);
+    colorFill.classList.add("on");
+
+    clearTimeout(timer);
+    timer = setTimeout(() => {
+      colorFill.classList.remove("on");
+
+      // eliminar perdedores del DOM
+      for (const [id] of dotEls){
+        if (!winSet.has(id)) removeDot(id);
+      }
+
+      state = "waiting";
+      stateEl.textContent = "esperando";
+
+      for (const [id] of fingers){
+        const el = dotEls.get(id);
+        if (el) el.classList.remove("win","lose","running");
+      }
+      renderLive();
+    }, FILL_MS);
+  }
+
+  // --- Touch events ---
+  zone.addEventListener("touchstart", (e) => {
+    e.preventDefault();
+
+    let changedCount = false;
+
+    for (const t of e.changedTouches){
+      const id = t.identifier;
+
+      if (!fingers.has(id) && fingers.size < MAX){
+        fingers.set(id, { x:t.clientX, y:t.clientY, taps:0, color:null });
+        changedCount = true;
+      }
+
+      const f = fingers.get(id);
+      if (f){
+        f.x = t.clientX;
+        f.y = t.clientY;
+
+        // tap = cada touchstart durante la ronda
+        if (state === "running") f.taps++;
+      }
+    }
+
+    // si entró/salió un dedo, colores únicos + reinicio de 4s (solo en running)
+    if (changedCount){
+      ensureUniqueColors();
+      if (state === "running") restartRoundTimer();
+    }
+
+    if (state === "waiting" && lastCount < 2 && fingers.size >= 2){
+      startRound();
+    }
+
+    lastCount = fingers.size;
+
+    if (state !== "fin") renderLive();
+  }, { passive:false });
+
+  zone.addEventListener("touchmove", (e) => {
+    e.preventDefault();
+    if (state === "fin") return;
+
+    for (const t of e.changedTouches){
+      const f = fingers.get(t.identifier);
+      if (f){
+        f.x = t.clientX;
+        f.y = t.clientY;
+      }
+    }
+    renderLive();
+  }, { passive:false });
+
+  zone.addEventListener("touchend", (e) => {
+    e.preventDefault();
+
+    let changedCount = false;
+
+    for (const t of e.changedTouches){
+      if (fingers.has(t.identifier)){
+        fingers.delete(t.identifier);
+        removeDot(t.identifier);
+        changedCount = true;
+      }
+    }
+
+    lastCount = fingers.size;
+
+    if (changedCount && state === "running"){
+      ensureUniqueColors();
+      restartRoundTimer();
+      renderLive();
+    }
+  }, { passive:false });
+
+  zone.addEventListener("touchcancel", (e) => {
+    e.preventDefault();
+
+    let changedCount = false;
+
+    for (const t of e.changedTouches){
+      if (fingers.has(t.identifier)){
+        fingers.delete(t.identifier);
+        removeDot(t.identifier);
+        changedCount = true;
+      }
+    }
+
+    lastCount = fingers.size;
+
+    if (changedCount && state === "running"){
+      ensureUniqueColors();
+      restartRoundTimer();
+      renderLive();
+    }
+  }, { passive:false });
+
+  // init
+  stateEl.textContent = "esperando";
+  ensureUniqueColors();
+  renderLive();
+})();
 </script>
 </body>
 </html>
