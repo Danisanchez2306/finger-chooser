@@ -7,6 +7,11 @@
 <title>Finger Chooser</title>
 
 <style>
+:root{
+  --green:#7fb13a;
+  --orange:#ff8a00;
+}
+
 html, body{
   margin:0;height:100%;background:black;
   font-family:-apple-system,system-ui,sans-serif;overflow:hidden;color:white;
@@ -20,16 +25,19 @@ html, body{
   position:fixed;top:12px;left:12px;right:12px;z-index:10;
   display:flex;justify-content:space-between;align-items:flex-start;gap:12px;
 }
+
+/* Texto estado (se camufla igual que el hint) */
 #state{
   position:fixed;left:50%;top:16px;transform:translateX(-50%);
-  font-size:14px;opacity:.55;text-transform:lowercase;z-index:10;
+  font-size:13px;opacity:.55;text-transform:lowercase;z-index:10;
   pointer-events:none;
+  color:#000; /* se sincroniza con hint */
 }
 
-/* Botón circular verde arriba-izquierda (1F) */
+/* Botón circular arriba-izquierda (1F) */
 #winBtn{
   width:76px;height:76px;border-radius:50%;
-  background:#7fb13a;
+  background:var(--green);
   display:flex;align-items:center;justify-content:center;
   color:white;font-size:34px;font-weight:500;
   border:none;outline:none;
@@ -37,7 +45,7 @@ html, body{
   -webkit-tap-highlight-color: transparent;
 }
 
-/* Botón ? arriba-derecha (solo decorativo/ayuda) */
+/* Botón ? arriba-derecha */
 #helpBtn{
   width:76px;height:76px;border-radius:50%;
   background:#ff00a8;
@@ -79,21 +87,22 @@ html, body{
 }
 .stepBtn{
   width:54px;height:54px;border-radius:50%;
-  border:3px solid #7fb13a;
+  border:3px solid var(--accent);
   background:#fff;
-  color:#7fb13a;
+  color:var(--accent);
   font-size:34px;line-height:0;
   display:flex;align-items:center;justify-content:center;
   -webkit-tap-highlight-color: transparent;
 }
 #count{
   font-size:44px;font-weight:500;
+  color:#4a4a4a;
 }
 
 /* Segmented */
 #seg{
   width:100%;
-  border:2px solid #7fb13a;
+  border:2px solid var(--accent);
   border-radius:14px;
   overflow:hidden;
   display:flex;
@@ -104,56 +113,115 @@ html, body{
   font-size:18px;
   border:none;outline:none;
   background:#fff;
-  color:#7fb13a;
+  color:var(--accent);
 }
 .segBtn.active{
-  background:#7fb13a;
+  background:var(--accent);
   color:#fff;
 }
 
-/* Círculo */
+/* =========================
+   DOT + RINGS (como el vídeo)
+   ========================= */
 .dot{
   --c:#ff3b30;
   position:fixed;width:130px;height:130px;border-radius:50%;
-  transform:translate(-50%,-50%);pointer-events:none;z-index:5;
-  box-shadow:0 0 40px rgba(255,255,255,.22);opacity:.95;
+  transform:translate(-50%,-50%);
+  pointer-events:none;z-index:5;
+  opacity:.95;
   transition:opacity .26s, transform .26s, filter .26s;
 }
 
-/* Aro estilo Chwazi */
-.dot::before{
-  content:"";position:absolute;inset:-14px;border-radius:50%;
-  background:conic-gradient(
-    var(--c) 0deg, var(--c) 70deg,
-    transparent 70deg, transparent 180deg,
-    var(--c) 180deg, var(--c) 250deg,
-    transparent 250deg, transparent 360deg
-  );
-  -webkit-mask:radial-gradient(circle,transparent 58%,#000 60%);
-  mask:radial-gradient(circle,transparent 58%,#000 60%);
+/* el relleno del círculo */
+.dot .fill{
+  position:absolute;inset:0;border-radius:50%;
+  background:var(--c);
 }
-.dot.running::before{animation:ringSpin .7s linear infinite;}
-@keyframes ringSpin{to{transform:rotate(360deg)}}
+
+/* contenedor del aro */
+.dot .rings{
+  position:absolute;
+  inset:-18px; /* hace que el aro quede fuera */
+  width:calc(100% + 36px);
+  height:calc(100% + 36px);
+  pointer-events:none;
+  transform:rotate(0deg);
+}
+
+/* estilo de los arcos */
+.dot .arc{
+  fill:none;
+  stroke:var(--c);
+  stroke-width:10;
+  stroke-linecap:butt;
+  stroke-dasharray:100;
+  stroke-dashoffset:100; /* oculto hasta “dibujar” */
+  opacity:.95;
+}
+.dot .arc.inner{
+  stroke-width:8;
+  opacity:.60;
+}
+
+/* animación de “dibujar el aro” al tocar */
+.dot.reveal .arc.outer{
+  animation:drawArc 180ms ease-out forwards;
+}
+.dot.reveal .arc.inner{
+  animation:drawArc 220ms ease-out 50ms forwards;
+}
+@keyframes drawArc{
+  to{ stroke-dashoffset:0; }
+}
+
+/* durante la espera: rotación y “respiración” */
+.dot.running .rings{
+  animation:spin 650ms linear infinite, breathe 900ms ease-in-out infinite;
+}
+@keyframes spin{ to{ transform:rotate(360deg); } }
+@keyframes breathe{
+  0%,100%{ filter:brightness(1); }
+  50%{ filter:brightness(1.12); }
+}
 
 /* Perdedor */
 .dot.lose{
-  opacity:0;transform:translate(-50%,-50%) scale(.78);
+  opacity:0;
+  transform:translate(-50%,-50%) scale(.78);
   filter:blur(2px) brightness(.9);
 }
 
-/* Ganador: donut negro + anillos */
+/* Ganador: donut negro + anillo fijo (como tu captura) */
 @keyframes winPop{
-  0%{transform:translate(-50%,-50%) scale(1.25)}
-  100%{transform:translate(-50%,-50%) scale(1.05)}
+  0%{ transform:translate(-50%,-50%) scale(1.18); }
+  100%{ transform:translate(-50%,-50%) scale(1.05); }
 }
 .dot.win{
-  background:#000 !important;box-shadow:none;opacity:1;
   animation:winPop .22s ease-out forwards;
 }
-.dot.win::before{content:none;}
-.dot.win::after{
-  content:"";position:absolute;inset:30px;border-radius:50%;
-  box-shadow:inset 0 0 0 10px var(--c), inset 0 0 0 18px #000;
+
+/* al ganar, el relleno pasa a negro */
+.dot.win .fill{
+  background:#000 !important;
+}
+
+/* al ganar, queremos aro más “completo”, sin dibujo: dejamos dashoffset 0 */
+.dot.win .arc{
+  stroke-dashoffset:0 !important;
+  opacity:1;
+}
+.dot.win .arc.inner{
+  opacity:1;
+}
+
+/* para parecer más al winner de tu captura: hacemos el aro exterior más grueso */
+.dot.win .arc.outer{ stroke-width:12; }
+.dot.win .arc.inner{ stroke-width:8; }
+
+/* halo discreto */
+.dot.win .rings{
+  animation:spin 900ms linear infinite;
+  filter:drop-shadow(0 0 2px rgba(0,0,0,.35));
 }
 </style>
 </head>
@@ -201,12 +269,24 @@ html, body{
   const countEl = document.getElementById("count");
   const segFingers = document.getElementById("segFingers");
   const segGroups = document.getElementById("segGroups");
+  const modal = document.getElementById("modal");
+
+  // Accent dinámico del modal
+  let mode = "fingers"; // "fingers" | "groups"
+  function setAccent(){
+    const accent = (mode === "groups")
+      ? getComputedStyle(document.documentElement).getPropertyValue("--orange").trim()
+      : getComputedStyle(document.documentElement).getPropertyValue("--green").trim();
+    modal.style.setProperty("--accent", accent);
+  }
 
   const MAX=5, ROUND_MS=4000, FILL_MS=5000;
   const COLORS=["#ff3b30","#ff9500","#ffcc00","#34c759","#00c7be","#007aff","#5856d6","#af52de","#ff2d55","#ff6f00"];
 
-  // Estado ganadores (1–4)
-  let winnerCount = 1;
+  // selectorValue:
+  // - fingers: nº ganadores
+  // - groups: nº grupos
+  let selectorValue = 1;
 
   // id -> {x,y,taps,color,path:[], eightLocked:boolean, wLocked:boolean}
   const fingers=new Map();
@@ -218,9 +298,25 @@ html, body{
 
   const ensureDot=id=>{
     if(dotEls.has(id)) return dotEls.get(id);
-    const d=document.createElement("div"); d.className="dot";
-    document.body.appendChild(d); dotEls.set(id,d); return d;
+
+    const d=document.createElement("div");
+    d.className="dot";
+    d.innerHTML = `
+      <div class="fill"></div>
+      <svg class="rings" viewBox="0 0 100 100" aria-hidden="true">
+        <!-- outer arc -->
+        <path class="arc outer" pathLength="100"
+          d="M 86 26 A 40 40 0 1 1 26 86" />
+        <!-- inner arc -->
+        <path class="arc inner" pathLength="100"
+          d="M 78 22 A 33 33 0 1 0 22 78" />
+      </svg>
+    `;
+    document.body.appendChild(d);
+    dotEls.set(id,d);
+    return d;
   };
+
   const removeDot=id=>{ if(dotEls.has(id)){dotEls.get(id).remove(); dotEls.delete(id)} };
 
   function ensureUniqueColorsStable(){
@@ -242,11 +338,30 @@ html, body{
       const el=ensureDot(id);
       el.style.left=f.x+"px"; el.style.top=f.y+"px";
       const c=f.color||COLORS[0];
-      el.style.background=c; el.style.setProperty("--c",c);
-      el.classList.toggle("running",state==="running");
+      el.style.setProperty("--c",c);
+
+      el.classList.toggle("running", state==="running");
       el.classList.remove("win","lose");
     }
     for(const [id] of dotEls){ if(!fingers.has(id)) removeDot(id); }
+  }
+
+  function setHiddenTextColor(color){
+    hintEl.style.color = color;
+    stateEl.style.color = color;
+  }
+
+  function setFillFromColors(colors){
+    if(colors.length<=1) colorFill.style.background=colors[0]||"black";
+    else{
+      const stops=colors.map((c,i)=>`${c} ${Math.round(i/(colors.length-1)*100)}%`).join(", ");
+      colorFill.style.background=`linear-gradient(135deg, ${stops})`;
+    }
+  }
+
+  function setHintColorWhenFill(on, color){
+    // Mientras hay fill, texto del mismo color para que casi no se vea.
+    setHiddenTextColor(on ? (color || "#000") : "#000");
   }
 
   function restartRoundTimer(){
@@ -257,7 +372,8 @@ html, body{
 
   function startRound(){
     if(fingers.size<2) return;
-    state="running"; stateEl.textContent="jugando";
+    state="running";
+    stateEl.textContent="jugando";
 
     // no mantener 8/W entre rondas
     for(const f of fingers.values()){
@@ -328,6 +444,26 @@ html, body{
     return changes >= 3;
   }
 
+  // Track + lock (8/W se bloquean al detectarlos)
+  function trackAndLockIfNeeded(f){
+    if(!f || f.eightLocked || f.wLocked) return;
+
+    f.path.push({x:f.x,y:f.y});
+
+    if(isEight(f.path)){
+      f.eightLocked = true;
+      f.wLocked = false;
+      f.path = f.path.slice(-80);
+      return;
+    }
+    if(isW(f.path)){
+      f.wLocked = true;
+      f.eightLocked = false;
+      f.path = f.path.slice(-80);
+      return;
+    }
+  }
+
   function pickWinners(ids,k){
     const pool=ids.slice(), out=[], want=Math.min(k,pool.length);
     for(let i=0;i<want;i++){
@@ -338,54 +474,87 @@ html, body{
     return out;
   }
 
-  function setFillFromColors(colors){
-    if(colors.length<=1) colorFill.style.background=colors[0]||"black";
-    else{
-      const stops=colors.map((c,i)=>`${c} ${Math.round(i/(colors.length-1)*100)}%`).join(", ");
-      colorFill.style.background=`linear-gradient(135deg, ${stops})`;
+  function assignGroups(ids, groupCount){
+    const shuffled = shuffle(ids);
+    const groups = Array.from({length: groupCount}, () => []);
+    let gi = 0;
+    for(const id of shuffled){
+      groups[gi].push(id);
+      gi = (gi + 1) % groupCount;
     }
-  }
-
-  function setHintColorWhenFill(on, color){
-    hintEl.style.color = on ? (color || "#000") : "#000";
+    return groups;
   }
 
   function endRound(){
-    state="fin"; stateEl.textContent="fin";
-    const wanted = winnerCount;
-    const entries=[...fingers.entries()];
+    state="fin";
+    stateEl.textContent="fin";
 
-    const eights = entries.filter(([_,f])=>f.eightLocked === true).map(([id])=>id);
+    const entries=[...fingers.entries()];
+    const idsAll = entries.map(([id])=>id);
+
+    const eights = entries.filter(([_,f])=>f.eightLocked).map(([id])=>id);
     const sevens = entries.filter(([_,f])=>f.taps===7).map(([id])=>id);
     const banned9= entries.filter(([_,f])=>f.taps===9).map(([id])=>id);
-    const bannedW= entries.filter(([_,f])=>f.wLocked === true).map(([id])=>id);
-
+    const bannedW= entries.filter(([_,f])=>f.wLocked).map(([id])=>id);
     const banned = new Set([...bannedW, ...banned9]);
 
-    let winners=[];
-    if(eights.length){
-      winners = pickWinners(eights, wanted);
-    }else if(sevens.length){
-      winners = pickWinners(sevens, wanted);
+    let survivors = [];
+
+    if(mode === "fingers"){
+      const wanted = selectorValue;
+
+      if(eights.length){
+        survivors = pickWinners(eights, wanted);
+      }else if(sevens.length){
+        survivors = pickWinners(sevens, wanted);
+      }else{
+        const allowed = idsAll.filter(id=>!banned.has(id));
+        survivors = allowed.length ? pickWinners(allowed, wanted)
+                                  : pickWinners(idsAll, wanted);
+      }
     }else{
-      const allowed = entries.map(([id])=>id).filter(id=>!banned.has(id));
-      winners = allowed.length ? pickWinners(allowed, wanted)
-                               : pickWinners(entries.map(([id])=>id), wanted);
+      const groupCount = selectorValue;
+
+      const allowed = idsAll.filter(id=>!banned.has(id));
+      const pool = allowed.length ? allowed : idsAll;
+
+      const groups = assignGroups(pool, groupCount);
+
+      let winnerGroupIndex = rand(groups.length);
+
+      const eightInPool = eights.filter(id => pool.includes(id));
+      if(eightInPool.length){
+        const target = eightInPool[0];
+        for(let i=0;i<groups.length;i++){
+          if(groups[i].includes(target)){ winnerGroupIndex = i; break; }
+        }
+      }else if(sevens.length){
+        const target = sevens.find(id => pool.includes(id));
+        if(target){
+          for(let i=0;i<groups.length;i++){
+            if(groups[i].includes(target)){ winnerGroupIndex = i; break; }
+          }
+        }
+      }
+
+      survivors = groups[winnerGroupIndex].slice();
     }
 
-    const winSet=new Set(winners);
+    const winSet=new Set(survivors);
 
+    // animación final: gana/ pierde
     for(const [id] of fingers){
       const el=dotEls.get(id);
       if(!el) continue;
       el.classList.remove("running");
       el.classList.add(winSet.has(id) ? "win" : "lose");
+      // asegurar que el aro esté visible al final
+      el.classList.add("reveal");
     }
 
-    const winColors=winners.map(id=>fingers.get(id)?.color).filter(Boolean);
+    const winColors=survivors.map(id=>fingers.get(id)?.color).filter(Boolean);
     setFillFromColors(winColors);
     colorFill.classList.add("on");
-
     setHintColorWhenFill(true, winColors[0] || "#000");
 
     clearTimeout(timer);
@@ -397,36 +566,15 @@ html, body{
         if(!winSet.has(id)) removeDot(id);
       }
 
-      state="waiting"; stateEl.textContent="esperando";
+      state="waiting";
+      stateEl.textContent="esperando";
+
       for(const [id] of fingers){
         const el=dotEls.get(id);
-        if(el) el.classList.remove("win","lose","running");
+        if(el) el.classList.remove("win","lose","running","reveal");
       }
       renderLive();
     }, FILL_MS);
-  }
-
-  // Track + lock (para que si cierras el 8 o la W, ya no se estropee)
-  function trackAndLockIfNeeded(f){
-    if(!f || f.eightLocked || f.wLocked) return;
-
-    f.path.push({x:f.x,y:f.y});
-
-    // prioridad: 8
-    if(isEight(f.path)){
-      f.eightLocked = true;
-      f.wLocked = false;
-      f.path = f.path.slice(-80);
-      return;
-    }
-
-    // W
-    if(isW(f.path)){
-      f.wLocked = true;
-      f.eightLocked = false;
-      f.path = f.path.slice(-80);
-      return;
-    }
   }
 
   // --- Touch events ---
@@ -446,6 +594,13 @@ html, body{
       if(f){
         f.x=t.clientX; f.y=t.clientY;
 
+        const el = ensureDot(id);
+
+        // ✅ animación: el aro “se dibuja” al tocar
+        el.classList.remove("reveal"); // retrigger limpio
+        void el.offsetWidth;           // force reflow para que se vea el retrigger
+        el.classList.add("reveal");
+
         if(state==="running"){
           f.taps++;
           trackAndLockIfNeeded(f);
@@ -453,7 +608,9 @@ html, body{
       }
     }
 
-    if(state==="waiting" && lastCount<2 && fingers.size>=2) startRound();
+    if(state==="waiting" && lastCount<2 && fingers.size>=2){
+      startRound();
+    }
 
     if(changed){
       ensureUniqueColorsStable();
@@ -474,7 +631,6 @@ html, body{
 
       f.x=t.clientX; f.y=t.clientY;
       if(f.eightLocked || f.wLocked) continue;
-
       trackAndLockIfNeeded(f);
     }
     renderLive();
@@ -487,11 +643,9 @@ html, body{
     for(const t of e.changedTouches){
       if(fingers.has(t.identifier)){
         const f=fingers.get(t.identifier);
-
         if(state==="running" && f && !(f.eightLocked || f.wLocked)){
           trackAndLockIfNeeded(f);
         }
-
         fingers.delete(t.identifier);
         removeDot(t.identifier);
         changed=true;
@@ -532,61 +686,54 @@ html, body{
     }
   }, {passive:false});
 
-  // --- UI: modal winners ---
-  function updateWinnersUI(){
-    countEl.textContent = String(winnerCount);
-    winBtn.textContent = String(winnerCount) + "F";
+  // --- UI modal ---
+  function updateUI(){
+    countEl.textContent = String(selectorValue);
+    winBtn.textContent = String(selectorValue) + "F";
+    winBtn.style.background = (mode === "groups") ? "var(--orange)" : "var(--green)";
+    setAccent();
   }
-  updateWinnersUI();
+  function openModal(){ overlay.classList.add("on"); }
+  function closeModal(){ overlay.classList.remove("on"); }
 
-  function openModal(){
-    overlay.classList.add("on");
-  }
-  function closeModal(){
-    overlay.classList.remove("on");
-  }
+  winBtn.addEventListener("click",(e)=>{ e.preventDefault(); openModal(); });
+  helpBtn.addEventListener("click",(e)=>{ e.preventDefault(); openModal(); });
 
-  winBtn.addEventListener("click", (e)=>{ e.preventDefault(); openModal(); });
-  overlay.addEventListener("click", (e)=>{
-    if(e.target === overlay) closeModal();
-  });
+  overlay.addEventListener("click",(e)=>{ if(e.target===overlay) closeModal(); });
 
-  minusBtn.addEventListener("click", (e)=>{
+  minusBtn.addEventListener("click",(e)=>{
     e.preventDefault();
-    winnerCount = Math.max(1, winnerCount - 1);
-    updateWinnersUI();
+    selectorValue = Math.max(1, selectorValue - 1);
+    updateUI();
   });
-  plusBtn.addEventListener("click", (e)=>{
+  plusBtn.addEventListener("click",(e)=>{
     e.preventDefault();
-    winnerCount = Math.min(4, winnerCount + 1);
-    updateWinnersUI();
+    selectorValue = Math.min(4, selectorValue + 1);
+    updateUI();
   });
 
   segFingers.addEventListener("click",(e)=>{
     e.preventDefault();
+    mode="fingers";
     segFingers.classList.add("active");
     segGroups.classList.remove("active");
+    updateUI();
   });
   segGroups.addEventListener("click",(e)=>{
     e.preventDefault();
-    // Solo visual (como en tu captura)
+    mode="groups";
     segGroups.classList.add("active");
     segFingers.classList.remove("active");
-    // volvemos a Fingers automáticamente al cerrar, para que no confunda
-    setTimeout(()=>{
-      segFingers.classList.add("active");
-      segGroups.classList.remove("active");
-    }, 250);
-  });
-
-  helpBtn.addEventListener("click",(e)=>{
-    e.preventDefault();
-    // Minimalista: abre/cierra el modal también (o puedes poner instrucciones)
-    openModal();
+    updateUI();
   });
 
   // init
+  modal.style.setProperty("--accent", "var(--green)");
+  setAccent();
+  updateUI();
+
   stateEl.textContent="esperando";
+  setHintColorWhenFill(false); // negro sobre negro (solo lo ven los vivos)
   ensureUniqueColorsStable();
   renderLive();
 })();
