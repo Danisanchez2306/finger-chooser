@@ -6,6 +6,11 @@
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <title>Finger Chooser</title>
 
+<!-- ✅ ICONO (ÚNICO CAMBIO #1) -->
+<link rel="apple-touch-icon" href="https://img.utdstc.com/icon/3b8/ba4/3b8ba466194ae10e0c82388935566ec2afa171f5b71e52471f7a298da7d690cc:200">
+<link rel="icon" href="https://img.utdstc.com/icon/3b8/ba4/3b8ba466194ae10e0c82388935566ec2afa171f5b71e52471f7a298da7d690cc:200">
+<meta name="theme-color" content="#000000">
+
 <style>
 :root{ --green:#7fb13a; --orange:#ff8a00; }
 html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-apple-system,system-ui,sans-serif; }
@@ -203,7 +208,7 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
   const ROUND_MS = 4000;
   const HOLD_MS = 5000;
 
-  // ✅ SOLO CAMBIO: 10 colores fosforitos, bien contrastados
+  // ✅ SOLO CAMBIO #2: 10 colores fosforitos, bien contrastados
   const COLORS = [
     "#00FF00", // verde neón
     "#00FFFF", // cian neón
@@ -220,6 +225,7 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
   let selectorValue = 1;
   let mode = "fingers";
 
+  // id -> finger
   const fingers = new Map();
   const dots = new Map();
 
@@ -228,9 +234,11 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
   let roundTimer = null;
   let holdTimer = null;
 
+  // Fingers resultado
   let winnersSet = new Set();
   let winnerColors = [];
 
+  // Snapshot para postHold (quieto 5s)
   // [{x,y, fill, ring, isWin}]
   let holdSnapshot = [];
 
