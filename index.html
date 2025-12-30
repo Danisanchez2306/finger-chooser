@@ -6,9 +6,9 @@
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <title>Finger Chooser</title>
 
-<!-- ✅ ICONO (ÚNICO CAMBIO #1) -->
-<link rel="apple-touch-icon" href="https://img.utdstc.com/icon/3b8/ba4/3b8ba466194ae10e0c82388935566ec2afa171f5b71e52471f7a298da7d690cc:200">
-<link rel="icon" href="https://img.utdstc.com/icon/3b8/ba4/3b8ba466194ae10e0c82388935566ec2afa171f5b71e52471f7a298da7d690cc:200">
+<!-- ✅ ICONO -->
+<link rel="apple-touch-icon" href="https://play-lh.googleusercontent.com/VxTNnpTSwD7tj4l9kVM7p-3zf43Wp162wyq-Jf6DR8EaIxrEFOdRFggodqnQAOG7SKcz=w480-h960-rw">
+<link rel="icon" href="https://play-lh.googleusercontent.com/VxTNnpTSwD7tj4l9kVM7p-3zf43Wp162wyq-Jf6DR8EaIxrEFOdRFggodqnQAOG7SKcz=w480-h960-rw">
 <meta name="theme-color" content="#000000">
 
 <style>
@@ -208,7 +208,7 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
   const ROUND_MS = 4000;
   const HOLD_MS = 5000;
 
-  // ✅ SOLO CAMBIO #2: 10 colores fosforitos, bien contrastados
+  // 10 colores fosforitos (bien contrastados)
   const COLORS = [
     "#00FF00", // verde neón
     "#00FFFF", // cian neón
@@ -219,13 +219,12 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
     "#ADFF2F", // lima
     "#FF1493", // rosa neón
     "#7CFF00", // verde ácido
-    "#8A2BE2"  // violeta eléctrico (separado del rosa)
+    "#8A2BE2"  // violeta eléctrico
   ];
 
   let selectorValue = 1;
   let mode = "fingers";
 
-  // id -> finger
   const fingers = new Map();
   const dots = new Map();
 
@@ -234,11 +233,9 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
   let roundTimer = null;
   let holdTimer = null;
 
-  // Fingers resultado
   let winnersSet = new Set();
   let winnerColors = [];
 
-  // Snapshot para postHold (quieto 5s)
   // [{x,y, fill, ring, isWin}]
   let holdSnapshot = [];
 
@@ -582,9 +579,6 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
     }
   }
 
-  /* =========================
-     TOUCH
-     ========================= */
   function canAddNewFingers(){
     return (state === "waiting" || state === "running");
   }
@@ -705,9 +699,6 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
   zone.addEventListener("touchend", handleEndLike, {passive:false});
   zone.addEventListener("touchcancel", handleEndLike, {passive:false});
 
-  /* =========================
-     Modal
-     ========================= */
   function updateUI(){
     countEl.textContent = String(selectorValue);
     winBtn.textContent = String(selectorValue) + "F";
@@ -738,7 +729,6 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
     updateUI();
   });
 
-  // init
   stateEl.textContent="esperando";
   setHiddenTextColor("#000");
   updateUI();
