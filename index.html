@@ -133,12 +133,6 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
 @keyframes ringBreathe{ 0%,100%{ filter:brightness(1); } 50%{ filter:brightness(1.12); } }
 @keyframes ringBreathe2{ 0%,100%{ opacity:.45; } 50%{ opacity:.75; } }
 
-.dot.lose{
-  opacity:0;
-  transform:translate(-50%,-50%) scale(.78);
-  filter:blur(2px) brightness(.9);
-}
-
 /* ganador: negro + aro color */
 @keyframes winPop{
   0%{transform:translate(-50%,-50%) scale(1.18)}
@@ -195,7 +189,6 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
   const hintEl = document.getElementById("hint");
   const stateEl = document.getElementById("state");
 
-  // UI modal
   const winBtn = document.getElementById("winBtn");
   const helpBtn = document.getElementById("helpBtn");
   const overlay = document.getElementById("modalOverlay");
@@ -212,22 +205,25 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
 
   const COLORS = ["#ff3b30","#ff9500","#ffcc00","#34c759","#00c7be","#007aff","#5856d6","#af52de","#ff2d55","#ff6f00"];
 
-  let selectorValue = 1; // Fingers: ganadores | Groups: nº grupos
+  let selectorValue = 1;
   let mode = "fingers";
 
   // id -> finger
   const fingers = new Map();
   const dots = new Map();
 
-  // states:
   // waiting | running | winnerLive | groupsLive | postHold
   let state = "waiting";
   let roundTimer = null;
   let holdTimer = null;
 
-  // Resultado decidido
-  let winnersSet = new Set(); // ids ganadores (Fingers)
-  let winnerColors = [];      // colores ganadores (Fingers)
+  // Fingers resultado
+  let winnersSet = new Set();
+  let winnerColors = [];
+
+  // Snapshot para postHold (quieto 5s)
+  // [{x,y, fill, ring, isWin}]
+  let holdSnapshot = [];
 
   const rand = n => Math.floor(Math.random()*n);
   const shuffle = a => { a=a.slice(); for(let i=a.length-1;i;i--){ const j=rand(i+1); [a[i],a[j]]=[a[j],a[i]]; } return a; };
@@ -260,10 +256,8 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
     const el = dots.get(key);
     if(el){ el.remove(); dots.delete(key); }
   }
-  function clearDotsNotIn(idsSet){
-    for(const [k] of dots){
-      if(!idsSet.has(k)) removeDot(k);
-    }
+  function clearAllDots(){
+    for(const [k] of dots) removeDot(k);
   }
 
   function mixWithWhite(hex, t){
@@ -302,20 +296,17 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
     clearTimeout(holdTimer); holdTimer=null;
   }
 
-  function goWaiting(){
+  function goWaitingHard(){
     clearTimers();
     winnersSet = new Set();
     winnerColors = [];
-    for(const f of fingers.values()) f.groupColor = null;
+    holdSnapshot = [];
     colorFill.classList.remove("on");
     setHintColorWhenFill(false);
     state = "waiting";
     stateEl.textContent = "esperando";
-    // limpia dots si no hay dedos
-    if(fingers.size === 0){
-      for(const [k] of dots) removeDot(k);
-    }
-    render();
+    fingers.clear();
+    clearAllDots();
   }
 
   function startRound(){
@@ -325,12 +316,12 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
     stateEl.textContent = "jugando";
 
     for(const f of fingers.values()){
-      f.taps = 0;
       f.path = [];
       f.eightLocked = false;
       f.wLocked = false;
       f.groupColor = null;
     }
+
     ensureUniqueRealColors();
     render();
 
@@ -409,18 +400,15 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
     clearTimeout(roundTimer);
 
     if(mode === "groups"){
-      // revela grupos, pero sigue “vivo”
       assignGroupsColors(selectorValue);
       state = "groupsLive";
       stateEl.textContent = "grupos";
-      // fondo negro siempre
       colorFill.classList.remove("on");
       setHintColorWhenFill(false);
       render();
       return;
     }
 
-    // Fingers: decide ganador(es), pero sigue “vivo”
     const entries = [...fingers.entries()];
     const idsAll = entries.map(([id])=>id);
 
@@ -449,25 +437,66 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
     render();
   }
 
-  function startHoldThenReset(){
-    // solo si ya no hay dedos
-    if(fingers.size !== 0) return;
+  function buildHoldSnapshot(){
+    holdSnapshot = [];
+
+    if(state === "winnerLive"){
+      for(const id of winnersSet){
+        const f = fingers.get(id);
+        if(!f) continue;
+        const c = f.realColor || winnerColors[0] || "#fff";
+        holdSnapshot.push({ x:f.x, y:f.y, fill:"#000", ring:c, isWin:true });
+      }
+      return;
+    }
+
+    if(state === "groupsLive"){
+      for(const [id,f] of fingers){
+        const gc = f.groupColor || "#e8e8e8";
+        holdSnapshot.push({ x:f.x, y:f.y, fill:gc, ring:mixWithWhite(gc,0.25), isWin:false });
+      }
+      return;
+    }
+  }
+
+  function enterPostHoldAndReset(){
+    // se llama cuando ya NO hay dedos
+    buildHoldSnapshot();
+    // limpiamos estructura fingers (pero mantenemos snapshot)
+    fingers.clear();
+    clearTimeout(holdTimer);
 
     state = "postHold";
     stateEl.textContent = "esperando";
 
-    // durante hold, dejamos la pantalla tal cual (ganadores o grupos visibles quietos)
-    clearTimeout(holdTimer);
+    // dibuja snapshot quieto SIN animación
+    render();
+
     holdTimer = setTimeout(() => {
-      // limpieza completa para nueva partida
-      for(const [k] of dots) removeDot(k);
-      fingers.clear();
-      goWaiting();
+      goWaitingHard();
     }, HOLD_MS);
   }
 
   function render(){
-    // waiting/running: todos con su color o blanco (groups)
+    // postHold: dibuja snapshot quieto sin animación
+    if(state === "postHold"){
+      clearAllDots();
+      for(let i=0;i<holdSnapshot.length;i++){
+        const s = holdSnapshot[i];
+        const key = "H"+i;
+        const el = ensureDot(key);
+        el.style.left = s.x+"px";
+        el.style.top  = s.y+"px";
+        el.style.setProperty("--fill", s.fill);
+        el.style.setProperty("--c", s.ring);
+        el.classList.remove("running","lose");
+        if(s.isWin) el.classList.add("win");
+        else el.classList.remove("win");
+      }
+      return;
+    }
+
+    // waiting/running
     if(state === "waiting" || state === "running"){
       for(const [id,f] of fingers){
         const el = ensureDot(id);
@@ -492,27 +521,31 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
       return;
     }
 
-    // winnerLive: solo ganadores (pero se mueven y animan si el dedo se mueve)
+    // winnerLive: SOLO ganadores, animando y moviéndose
     if(state === "winnerLive"){
-      // quita los no-ganadores
-      for(const [id] of dots){
-        if(!winnersSet.has(id)) removeDot(id);
+      // borra NO-ganadores (incluye que si quedaron dots viejos se vayan)
+      for(const [k] of dots){
+        if(!winnersSet.has(k)) removeDot(k);
       }
+      // y borra de pantalla cualquier dedo que no sea ganador
       for(const [id,f] of fingers){
-        if(!winnersSet.has(id)) continue;
+        if(!winnersSet.has(id)){
+          removeDot(id);
+          continue;
+        }
         const el = ensureDot(id);
         el.style.left = f.x+"px";
         el.style.top  = f.y+"px";
         const c = f.realColor || winnerColors[0] || "#fff";
         el.style.setProperty("--fill", c);
         el.style.setProperty("--c", c);
-        el.classList.add("win","running"); // ✅ sigue animación
+        el.classList.add("win","running");
         el.classList.remove("lose");
       }
       return;
     }
 
-    // groupsLive: todos con color de grupo, y siguen animando y moviéndose
+    // groupsLive: todos con color de grupo, animando y moviéndose
     if(state === "groupsLive"){
       for(const [id,f] of fingers){
         const el = ensureDot(id);
@@ -521,7 +554,7 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
         const gc = f.groupColor || "#e8e8e8";
         el.style.setProperty("--fill", gc);
         el.style.setProperty("--c", mixWithWhite(gc, 0.25));
-        el.classList.add("running");      // ✅ sigue animación
+        el.classList.add("running");
         el.classList.remove("win","lose");
       }
       for(const [k] of dots){
@@ -529,22 +562,17 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
       }
       return;
     }
-
-    // postHold: no hacemos nada (se queda quieto lo que haya)
   }
 
   /* =========================
      TOUCH
      ========================= */
   function canAddNewFingers(){
-    // solo en waiting/running
     return (state === "waiting" || state === "running");
   }
 
   zone.addEventListener("touchstart", e => {
     e.preventDefault();
-
-    // En winnerLive/groupsLive/postHold: NO se pueden añadir dedos nuevos
     if(!canAddNewFingers()) return;
 
     let changed = false;
@@ -555,8 +583,9 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
         fingers.set(id,{
           x:t.clientX, y:t.clientY,
           realColor:null,
-          taps:0, path:[],
-          eightLocked:false, wLocked:false,
+          path:[],
+          eightLocked:false,
+          wLocked:false,
           groupColor:null
         });
         changed = true;
@@ -571,7 +600,6 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
       startRound();
       return;
     }
-
     if(state==="running" && changed){
       restartRoundTimer();
     }
@@ -580,11 +608,8 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
 
   zone.addEventListener("touchmove", e => {
     e.preventDefault();
-
-    // En postHold ignoramos
     if(state==="postHold") return;
 
-    // En running / winnerLive / groupsLive actualizamos posiciones y animación
     for(const t of e.changedTouches){
       const f = fingers.get(t.identifier);
       if(!f) continue;
@@ -594,7 +619,7 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
         trackAndLockIfNeeded(f);
       }
 
-      // render rápido del dedo que se mueve
+      // render rápido de ese dedo
       const el = ensureDot(t.identifier);
       el.style.left = f.x+"px";
       el.style.top  = f.y+"px";
@@ -613,12 +638,14 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
           el.classList.remove("win");
         }
       } else if(state==="winnerLive"){
-        // solo animar si es ganador
+        // solo ganadores visibles
         if(winnersSet.has(t.identifier)){
           const c = f.realColor || winnerColors[0] || "#fff";
           el.style.setProperty("--fill", c);
           el.style.setProperty("--c", c);
           el.classList.add("win","running");
+        } else {
+          removeDot(t.identifier);
         }
       } else if(state==="groupsLive"){
         const gc = f.groupColor || "#e8e8e8";
@@ -633,30 +660,32 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
   function handleEndLike(e){
     e.preventDefault();
 
-    let changed=false;
     for(const t of e.changedTouches){
       const id = t.identifier;
+
+      // antes de borrar, si estamos en live, actualizamos la última posición
+      const f = fingers.get(id);
+      if(f){
+        f.x = t.clientX;
+        f.y = t.clientY;
+      }
+
       if(fingers.has(id)){
         fingers.delete(id);
         removeDot(id);
-        changed=true;
       }
     }
 
-    if(state==="running" && changed){
-      // reinicia cuenta si entra/sale dedo
+    // si estaba corriendo y cambian dedos => reinicia cuenta
+    if(state==="running"){
       restartRoundTimer();
     }
 
-    // Si el resultado ya está decidido (winnerLive o groupsLive) y ya no quedan dedos:
+    // si el resultado ya estaba decidido y ya no quedan dedos -> congelar snapshot 5s
     if((state==="winnerLive" || state==="groupsLive") && fingers.size===0){
-      // Deja la última imagen “quieta” (ya no hay dedos que mover)
-      state = "postHold";
-      // stop animación: quitamos running a todo lo que quede
-      for(const [,el] of dots){
-        el.classList.remove("running");
-      }
-      startHoldThenReset();
+      // quita animación antes de snapshot
+      for(const [,el] of dots) el.classList.remove("running");
+      enterPostHoldAndReset();
       return;
     }
 
