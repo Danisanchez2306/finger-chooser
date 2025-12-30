@@ -11,6 +11,11 @@
 html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-apple-system,system-ui,sans-serif; }
 #zone{ height:100%; touch-action:none; user-select:none; -webkit-user-select:none; }
 
+#colorFill{
+  position:fixed;inset:0;opacity:0;transition:opacity .22s;z-index:1;pointer-events:none;
+}
+#colorFill.on{opacity:1;}
+
 #topbar{
   position:fixed;top:12px;left:12px;right:12px;z-index:10;
   display:flex;justify-content:space-between;align-items:flex-start;gap:12px;
@@ -34,7 +39,7 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
   -webkit-tap-highlight-color:transparent;
 }
 
-/* texto “secreto” abajo derecha + estado arriba (mismo color siempre) */
+/* texto “secreto” abajo derecha + estado arriba */
 #hint{
   position:fixed;right:10px;bottom:10px;font-size:11px;
   color:#000;opacity:.6;z-index:20;user-select:none;pointer-events:none;
@@ -83,13 +88,14 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
    DOT + AROS (animación 4s)
    ========================= */
 .dot{
-  --c:#ff3b30;
+  --c:#ff3b30;      /* color del aro */
+  --fill:#ff3b30;   /* color del círculo */
   position:fixed;
   width:130px;height:130px;border-radius:50%;
   transform:translate(-50%,-50%);
   pointer-events:none;
   z-index:5;
-  background:var(--c);
+  background:var(--fill);
   box-shadow:0 0 36px rgba(255,255,255,.14);
   transition:opacity .28s, transform .28s, filter .28s;
 }
@@ -129,7 +135,7 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
   transform:rotate(0deg);
 }
 
-/* Animación durante la cuenta (4s) */
+/* Animación durante la cuenta */
 .dot.running::before{ animation:ringSpin .65s linear infinite, ringBreathe .9s ease-in-out infinite; }
 .dot.running::after { animation:ringSpinReverse .72s linear infinite, ringBreathe2 .95s ease-in-out infinite; }
 
@@ -138,63 +144,28 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
 @keyframes ringBreathe{ 0%,100%{ filter:brightness(1); } 50%{ filter:brightness(1.12); } }
 @keyframes ringBreathe2{ 0%,100%{ opacity:.45; } 50%{ opacity:.75; } }
 
-/* =========================
-   WIN OVERLAY (Fingers) — como tu captura
-   ========================= */
-#winOverlay{
-  position:fixed; inset:0;
-  z-index:8; /* por encima de dots (5) y por debajo de topbar (10) */
-  display:none;
-}
-#winOverlay.on{ display:grid; }
-
-.winCell{
-  position:relative;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-}
-.winDonut{
-  --c:#00ff00;
-  --bg:#00aa00;
-  width:min(260px, 56vw);
-  aspect-ratio:1/1;
-  border-radius:50%;
-  background:#000;
-  position:relative;
-  filter:drop-shadow(0 10px 30px rgba(0,0,0,.25));
-  animation:winPop .22s ease-out forwards;
+/* Perdedor: desaparece suave */
+.dot.lose{
+  opacity:0;
+  transform:translate(-50%,-50%) scale(.78);
+  filter:blur(2px) brightness(.9);
 }
 
-/* aro interior color */
-.winDonut::before{
-  content:"";
-  position:absolute;
-  inset:28%;
-  border-radius:50%;
-  box-shadow: inset 0 0 0 16px var(--c);
-  background:transparent;
-}
-
-/* centro color + aro negro */
-.winDonut::after{
-  content:"";
-  position:absolute;
-  inset:42%;
-  border-radius:50%;
-  background:var(--bg);
-  box-shadow: inset 0 0 0 10px #000;
-}
-
+/* Ganador: pop (sin centro negro) */
 @keyframes winPop{
-  0%{ transform:scale(1.18); }
-  100%{ transform:scale(1.05); }
+  0%{transform:translate(-50%,-50%) scale(1.18)}
+  100%{transform:translate(-50%,-50%) scale(1.05)}
+}
+.dot.win{
+  opacity:1;
+  animation:winPop .22s ease-out forwards;
+  box-shadow:none;
 }
 </style>
 </head>
 
 <body>
-<div id="winOverlay"></div>
+<div id="colorFill"></div>
 
 <div id="topbar">
   <button id="winBtn" aria-label="Ganadores">1F</button>
@@ -223,9 +194,9 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
 <script>
 (() => {
   const zone = document.getElementById("zone");
+  const colorFill = document.getElementById("colorFill");
   const hintEl = document.getElementById("hint");
   const stateEl = document.getElementById("state");
-  const winOverlay = document.getElementById("winOverlay");
 
   // UI modal
   const winBtn = document.getElementById("winBtn");
@@ -247,14 +218,19 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
   let selectorValue = 1;      // Fingers: nº ganadores (1–4). Groups: nº grupos (1–4)
   let mode = "fingers";       // fingers | groups
 
-  // id -> {x,y,realColor,groupColor,taps,path,eightLocked,wLocked}
+  // id -> {x,y,realColor,taps,path,eightLocked,wLocked,groupIndex}
   const fingers = new Map();
   const dots = new Map();
 
-  // estados: waiting | running | winnerFreeze | groupsReveal
+  // states: waiting | running | winnerFreeze | groupsReveal
   let state = "waiting";
-  let timer = null;
+  let roundTimer = null;
+  let resultTimer = null;
   let lastCount = 0;
+
+  // winner freeze
+  let winnersVisible = new Set();
+  let winnerColors = [];
 
   const rand = n => Math.floor(Math.random()*n);
   const shuffle = a => { a=a.slice(); for(let i=a.length-1;i;i--){ const j=rand(i+1); [a[i],a[j]]=[a[j],a[i]]; } return a; };
@@ -270,6 +246,9 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
   function setHiddenTextColor(color){
     hintEl.style.color = color;
     stateEl.style.color = color;
+  }
+  function setHintColorWhenFill(on, color){
+    setHiddenTextColor(on ? (color || "#000") : "#000");
   }
 
   function ensureDot(id){
@@ -287,7 +266,15 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
     }
   }
 
-  // Colores reales únicos (solo “realColor”; en Groups se ocultan hasta reveal)
+  function mixWithWhite(hex, t){ // t 0..1
+    const h = hex.replace("#","");
+    const r = parseInt(h.slice(0,2),16), g = parseInt(h.slice(2,4),16), b = parseInt(h.slice(4,6),16);
+    const rr = Math.round(r + (255-r)*t);
+    const gg = Math.round(g + (255-g)*t);
+    const bb = Math.round(b + (255-b)*t);
+    return "#" + [rr,gg,bb].map(x=>x.toString(16).padStart(2,"0")).join("");
+  }
+
   function ensureUniqueRealColors(){
     const used = new Set();
     for(const f of fingers.values()) if(f.realColor) used.add(f.realColor);
@@ -300,34 +287,82 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
     }
   }
 
+  function setFillFromWinnerColors(colors){
+    const cs = (colors || []).filter(Boolean);
+    if(cs.length <= 1){
+      colorFill.style.background = cs[0] || "#000";
+    } else {
+      const stops = cs.map((c,i)=>`${c} ${Math.round(i/(cs.length-1)*100)}%`).join(", ");
+      colorFill.style.background = `linear-gradient(135deg, ${stops})`;
+    }
+  }
+
   function renderLive(){
-    // Victory overlay en Fingers: no dots
+    // En winnerFreeze: SOLO ganadores (en su posición) + fondo teñido
     if(state === "winnerFreeze"){
-      for(const [id] of dots) removeDot(id);
+      for(const [id,f] of fingers){
+        if(!winnersVisible.has(id)){
+          removeDot(id);
+          continue;
+        }
+        const el = ensureDot(id);
+        el.style.left = f.x+"px";
+        el.style.top  = f.y+"px";
+
+        const c = f.realColor || winnerColors[0] || "#fff";
+        el.style.setProperty("--fill", c);
+        el.style.setProperty("--c", c);
+
+        el.classList.remove("running","lose");
+        el.classList.add("win");
+      }
+      for(const [id] of dots){
+        if(!winnersVisible.has(id)) removeDot(id);
+      }
       return;
     }
 
+    // En groupsReveal: mostrar todos con colores de grupo (fondo negro)
+    if(state === "groupsReveal"){
+      for(const [id,f] of fingers){
+        const el = ensureDot(id);
+        el.style.left = f.x+"px";
+        el.style.top  = f.y+"px";
+
+        const groupColor = f.groupIndexColor || "#e8e8e8";
+        // aro un pelín más claro, como “borde” suave de tus capturas
+        const ring = mixWithWhite(groupColor, 0.25);
+
+        el.style.setProperty("--fill", groupColor);
+        el.style.setProperty("--c", ring);
+
+        el.classList.remove("running","lose","win");
+      }
+      for(const [id] of dots){
+        if(!fingers.has(id)) removeDot(id);
+      }
+      return;
+    }
+
+    // Normal / running
     for(const [id,f] of fingers){
       const el = ensureDot(id);
       el.style.left = f.x+"px";
       el.style.top  = f.y+"px";
 
-      let visible = f.realColor || COLORS[0];
-
-      // ✅ SOLO EN GROUPS: durante la cuenta, TODO BLANCO
+      // ✅ Groups durante la cuenta: TODO BLANCO/GRIS
       if(mode === "groups" && state === "running"){
-        visible = "#e8e8e8"; // blanco suave como tu captura
+        el.style.setProperty("--fill", "#e8e8e8");
+        el.style.setProperty("--c", "#bdbdbd");
+      } else {
+        // Fingers normal: color real siempre
+        const c = f.realColor || COLORS[0];
+        el.style.setProperty("--fill", c);
+        el.style.setProperty("--c", c);
       }
-
-      // ✅ SOLO EN GROUPS: tras el tiempo, colores por grupo
-      if(mode === "groups" && state === "groupsReveal"){
-        visible = f.groupColor || "#e8e8e8";
-      }
-
-      el.style.setProperty("--c", visible);
-      el.style.background = visible;
 
       el.classList.toggle("running", state==="running");
+      el.classList.remove("lose","win");
     }
 
     for(const [id] of dots){
@@ -337,13 +372,12 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
 
   function restartRoundTimer(){
     if(state!=="running") return;
-    clearTimeout(timer);
-    timer = setTimeout(endRound, ROUND_MS);
+    clearTimeout(roundTimer);
+    roundTimer = setTimeout(endRound, ROUND_MS);
   }
 
   function startRound(){
     if(fingers.size < 2) return;
-
     state = "running";
     stateEl.textContent = "jugando";
 
@@ -352,17 +386,17 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
       f.path = [];
       f.eightLocked = false;
       f.wLocked = false;
-      f.groupColor = null;
+      f.groupIndexColor = null;
     }
 
     ensureUniqueRealColors();
     renderLive();
 
-    clearTimeout(timer);
-    timer = setTimeout(endRound, ROUND_MS);
+    clearTimeout(roundTimer);
+    roundTimer = setTimeout(endRound, ROUND_MS);
   }
 
-  // ===== Trucos (solo afectan a Fingers) =====
+  // ===== Trucos (solo Fingers) =====
   function isEight(path){
     if(path.length < 14) return false;
     let minX=Infinity,maxX=-Infinity,minY=Infinity,maxY=-Infinity;
@@ -422,78 +456,52 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
     return out;
   }
 
-  // ===== Winner overlay (Fingers) =====
-  function showWinOverlay(colors){
-    winOverlay.innerHTML = "";
-    winOverlay.classList.add("on");
-
-    const n = Math.max(1, Math.min(4, colors.length || 1));
-    const cols = (n === 1) ? 1 : (n === 2 ? 2 : 2);
-    const rows = (n <= 2) ? 1 : 2;
-
-    winOverlay.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
-    winOverlay.style.gridTemplateRows = `repeat(${rows}, 1fr)`;
-
-    for(let i=0;i<cols*rows;i++){
-      const c = colors[i] || colors[0] || "#000";
-      const cell = document.createElement("div");
-      cell.className = "winCell";
-      cell.style.background = c;
-
-      const donut = document.createElement("div");
-      donut.className = "winDonut";
-      donut.style.setProperty("--c", c);
-      donut.style.setProperty("--bg", c);
-
-      cell.appendChild(donut);
-      winOverlay.appendChild(cell);
-    }
-  }
-  function hideWinOverlay(){
-    winOverlay.classList.remove("on");
-    winOverlay.innerHTML = "";
-  }
-
-  // ===== Groups: asignar colores de grupo SOLO al final =====
-  function assignGroupColors(groupCount){
+  function assignGroupsColors(groupCount){
     const ids = [...fingers.keys()];
     const g = Math.max(1, Math.min(4, groupCount));
-    const groupColors = shuffle(COLORS).slice(0, g);
 
-    // Reparto round-robin (como “grupos” visuales)
-    const shuffled = shuffle(ids);
+    const groupColors = shuffle(COLORS).slice(0, g);
+    const shuffledIds = shuffle(ids);
+
+    // Reparto round-robin -> 0..g-1
     let gi = 0;
-    for(const id of shuffled){
+    for(const id of shuffledIds){
       const f = fingers.get(id);
       if(!f) continue;
-      f.groupColor = groupColors[gi];
+      f.groupIndexColor = groupColors[gi];
       gi = (gi + 1) % g;
     }
   }
 
   function endRound(){
-    clearTimeout(timer);
+    clearTimeout(roundTimer);
 
-    // ✅ MODO GROUPS: blanco durante 4s, luego colores de grupos, fondo negro (sin overlay)
+    // ✅ GROUPS: reveal por colores SIN teñir fondo, y se quita a los 5s
     if(mode === "groups"){
       state = "groupsReveal";
       stateEl.textContent = "grupos";
 
-      assignGroupColors(selectorValue);
+      assignGroupsColors(selectorValue);
+
+      // fondo negro siempre
+      colorFill.classList.remove("on");
+      setHintColorWhenFill(false);
+
       renderLive();
 
-      timer = setTimeout(() => {
+      clearTimeout(resultTimer);
+      resultTimer = setTimeout(() => {
+        // volver a “esperando”
         state = "waiting";
         stateEl.textContent = "esperando";
-        // limpia colores de grupo para la siguiente ronda
-        for(const f of fingers.values()) f.groupColor = null;
+        for(const f of fingers.values()) f.groupIndexColor = null;
         renderLive();
       }, SHOW_MS);
 
       return;
     }
 
-    // ✅ MODO FINGERS: igual que lo tenías (winner overlay)
+    // ✅ FINGERS: ganador(es) en SU POSICIÓN + fondo teñido, perdedores desaparecen aunque sigan tocando
     stateEl.textContent = "fin";
 
     const entries = [...fingers.entries()];
@@ -515,19 +523,28 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
       winners = allowed.length ? pickWinners(allowed, wanted) : pickWinners(idsAll, wanted);
     }
 
-    const colors = winners.map(id => fingers.get(id)?.realColor).filter(Boolean);
-    showWinOverlay(colors.length ? colors : ["#000"]);
+    winnersVisible = new Set(winners);
+    winnerColors = winners.map(id => fingers.get(id)?.realColor).filter(Boolean);
 
-    setHiddenTextColor(colors[0] || "#000");
+    // fondo teñido (si varios -> degradado)
+    setFillFromWinnerColors(winnerColors);
+    colorFill.classList.add("on");
+    setHintColorWhenFill(true, winnerColors[0] || "#000");
 
     state = "winnerFreeze";
-    for(const [id] of dots) removeDot(id);
+    renderLive();
 
-    timer = setTimeout(() => {
-      hideWinOverlay();
-      setHiddenTextColor("#000");
+    clearTimeout(resultTimer);
+    resultTimer = setTimeout(() => {
+      // volver a negro y a jugar
+      colorFill.classList.remove("on");
+      setHintColorWhenFill(false);
+
       state = "waiting";
       stateEl.textContent = "esperando";
+      winnersVisible = new Set();
+      winnerColors = [];
+
       renderLive();
     }, SHOW_MS);
   }
@@ -535,6 +552,8 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
   // ---- Touch logic (reinicia 4s si entra o sale un dedo) ----
   zone.addEventListener("touchstart", e=>{
     e.preventDefault();
+
+    // durante resultados, ignoramos input
     if(state==="winnerFreeze" || state==="groupsReveal") return;
 
     let changed=false;
@@ -545,9 +564,10 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
       if(!fingers.has(id) && fingers.size < MAX){
         fingers.set(id,{
           x:t.clientX, y:t.clientY,
-          realColor:null, groupColor:null,
+          realColor:null,
           taps:0, path:[],
-          eightLocked:false, wLocked:false
+          eightLocked:false, wLocked:false,
+          groupIndexColor:null
         });
         changed=true;
       }
@@ -555,7 +575,7 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
       const f = fingers.get(id);
       if(f){
         f.x=t.clientX; f.y=t.clientY;
-        if(state==="running" && mode==="fingers"){ // trucos solo en Fingers
+        if(state==="running" && mode==="fingers"){
           f.taps++;
           trackAndLockIfNeeded(f);
         }
@@ -669,7 +689,7 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
   // init
   modal.style.setProperty("--accent", "var(--green)");
   stateEl.textContent="esperando";
-  setHiddenTextColor("#000");
+  setHintColorWhenFill(false);
   updateUI();
 })();
 </script>
