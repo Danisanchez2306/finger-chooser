@@ -138,7 +138,7 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
 @keyframes ringBreathe{ 0%,100%{ filter:brightness(1); } 50%{ filter:brightness(1.12); } }
 @keyframes ringBreathe2{ 0%,100%{ opacity:.45; } 50%{ opacity:.75; } }
 
-/* Perdedor */
+/* Perdedor (para Fingers) */
 .dot.lose{
   opacity:0;
   transform:translate(-50%,-50%) scale(.78);
@@ -146,7 +146,7 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
 }
 
 /* =========================
-   WIN OVERLAY (victoria captura)
+   WIN OVERLAY (Fingers)
    ========================= */
 #winOverlay{
   position:fixed; inset:0;
@@ -173,7 +173,7 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
   animation:winPop .22s ease-out forwards;
 }
 
-/* aro verde (gordo) */
+/* aro interior color */
 .winDonut::before{
   content:"";
   position:absolute;
@@ -183,7 +183,7 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
   background:transparent;
 }
 
-/* centro con color del fondo + aro negro fino */
+/* centro color + aro negro */
 .winDonut::after{
   content:"";
   position:absolute;
@@ -247,21 +247,21 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
 
   const MAX = 5;
   const ROUND_MS = 4000;
-  const FILL_MS = 5000;
+  const REVEAL_MS = 5000;
+
+  // paleta general para colores de dedos / ganadores
   const COLORS = ["#ff3b30","#ff9500","#ffcc00","#34c759","#00c7be","#007aff","#5856d6","#af52de","#ff2d55","#ff6f00"];
 
-  let selectorValue = 1;      // 1–4
+  let selectorValue = 1;      // 1–4 (Fingers=ganadores, Groups=nº grupos)
   let mode = "fingers";       // fingers | groups
 
-  const fingers = new Map();  // id -> {x,y,color,taps,path,eightLocked,wLocked}
-  const dots = new Map();     // id -> element
+  // id -> {x,y,realColor,displayColor,taps,path,eightLocked,wLocked}
+  const fingers = new Map();
+  const dots = new Map();
 
-  let state = "waiting";      // waiting | running | winnerFreeze
+  let state = "waiting";      // waiting | running | winnerFreeze | groupsReveal
   let timer = null;
   let lastCount = 0;
-
-  let winnersVisible = new Set();
-  let winnerColors = [];  // colores por ganador (para overlay)
 
   const rand = n => Math.floor(Math.random()*n);
   const shuffle = a => { a=a.slice(); for(let i=a.length-1;i;i--){ const j=rand(i+1); [a[i],a[j]]=[a[j],a[i]]; } return a; };
@@ -277,9 +277,6 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
   function setHiddenTextColor(color){
     hintEl.style.color = color;
     stateEl.style.color = color;
-  }
-  function setHintColorWhenWin(on, color){
-    setHiddenTextColor(on ? (color || "#000") : "#000");
   }
 
   function ensureDot(id){
@@ -297,34 +294,50 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
     }
   }
 
-  function ensureUniqueColorsStable(){
+  // Asignar colores reales únicos por dedo (pero en Groups no se muestran durante la cuenta)
+  function ensureUniqueRealColors(){
     const used = new Set();
-    for(const f of fingers.values()) if(f.color) used.add(f.color);
+    for(const f of fingers.values()) if(f.realColor) used.add(f.realColor);
     const available = shuffle(COLORS.filter(c => !used.has(c)));
     for(const f of fingers.values()){
-      if(!f.color){
-        f.color = available.length ? available.pop() : COLORS[rand(COLORS.length)];
-        used.add(f.color);
+      if(!f.realColor){
+        f.realColor = available.length ? available.pop() : COLORS[rand(COLORS.length)];
+        used.add(f.realColor);
       }
     }
   }
 
   function renderLive(){
+    // en victoria de Fingers: no render de dots, solo overlay
     if(state === "winnerFreeze"){
-      // Durante victoria NO renderizamos dots (solo overlay).
       for(const [id] of dots) removeDot(id);
       return;
     }
+
     for(const [id,f] of fingers){
       const el = ensureDot(id);
       el.style.left = f.x+"px";
       el.style.top  = f.y+"px";
-      const c = f.color || COLORS[0];
-      el.style.setProperty("--c", c);
-      el.style.background = c;
+
+      // Color visible depende del modo/estado:
+      // - Groups + running => BLANCO
+      // - Groups + groupsReveal => color de grupo
+      // - Fingers => color real siempre
+      let visible = f.realColor || COLORS[0];
+
+      if(mode==="groups" && state==="running"){
+        visible = "#ffffff";
+      } else if(mode==="groups" && state==="groupsReveal"){
+        visible = f.displayColor || "#ffffff";
+      }
+
+      el.style.setProperty("--c", visible);
+      el.style.background = visible;
+
       el.classList.toggle("running", state==="running");
-      el.classList.remove("win","lose");
+      el.classList.remove("lose");
     }
+
     for(const [id] of dots){
       if(!fingers.has(id)) removeDot(id);
     }
@@ -340,14 +353,18 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
     if(fingers.size < 2) return;
     state = "running";
     stateEl.textContent = "jugando";
+
     for(const f of fingers.values()){
       f.taps = 0;
       f.path = [];
       f.eightLocked = false;
       f.wLocked = false;
+      f.displayColor = null;
     }
-    ensureUniqueColorsStable();
+
+    ensureUniqueRealColors();
     renderLive();
+
     clearTimeout(timer);
     timer = setTimeout(endRound, ROUND_MS);
   }
@@ -412,17 +429,6 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
     return out;
   }
 
-  function assignGroups(ids, groupCount){
-    const s = shuffle(ids);
-    const groups = Array.from({length: groupCount}, () => []);
-    let gi=0;
-    for(const id of s){
-      groups[gi].push(id);
-      gi = (gi+1) % groupCount;
-    }
-    return groups;
-  }
-
   function showWinOverlay(colors){
     winOverlay.innerHTML = "";
     winOverlay.classList.add("on");
@@ -440,7 +446,6 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
       cell.className = "winCell";
       cell.style.background = c;
 
-      // donut como tu captura
       const donut = document.createElement("div");
       donut.className = "winDonut";
       donut.style.setProperty("--c", c);
@@ -450,17 +455,61 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
       winOverlay.appendChild(cell);
     }
   }
-
   function hideWinOverlay(){
     winOverlay.classList.remove("on");
     winOverlay.innerHTML = "";
   }
 
+  // ===== Groups: asignación de grupos por color (sin teñir fondo) =====
+  function assignGroupsByColor(ids, groupCount){
+    const shuffled = shuffle(ids);
+    const groupColors = shuffle(COLORS).slice(0, Math.max(1, Math.min(4, groupCount)));
+
+    // repartir round-robin
+    let gi = 0;
+    for(const id of shuffled){
+      const f = fingers.get(id);
+      if(!f) continue;
+      f.displayColor = groupColors[gi];
+      gi = (gi + 1) % groupColors.length;
+    }
+  }
+
   function endRound(){
-    stateEl.textContent = "fin";
+    clearTimeout(timer);
 
     const entries = [...fingers.entries()];
     const idsAll = entries.map(([id])=>id);
+
+    // En Groups: NO overlay de victoria, NO fondo coloreado.
+    if(mode === "groups"){
+      state = "groupsReveal";
+      stateEl.textContent = "grupos";
+
+      // asigna colores de grupo a TODOS
+      assignGroupsByColor(idsAll, selectorValue);
+
+      // texto secreto sigue negro para camuflarse (fondo negro)
+      setHiddenTextColor("#000");
+
+      // deja de animar (ya no running)
+      renderLive();
+
+      timer = setTimeout(() => {
+        // volver a normal
+        state = "waiting";
+        stateEl.textContent = "esperando";
+        // limpia colores de grupo para la siguiente ronda
+        for(const f of fingers.values()) f.displayColor = null;
+
+        renderLive();
+      }, REVEAL_MS);
+
+      return;
+    }
+
+    // ===== Fingers: victoria como captura =====
+    stateEl.textContent = "fin";
 
     const eights = entries.filter(([_,f])=>f.eightLocked).map(([id])=>id);
     const sevens = entries.filter(([_,f])=>f.taps===7).map(([id])=>id);
@@ -469,57 +518,30 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
     const banned = new Set([...banned9, ...bannedW]);
 
     let winners = [];
+    const wanted = selectorValue;
 
-    if(mode==="fingers"){
-      const wanted = selectorValue;
-      if(eights.length) winners = pickWinners(eights, wanted);
-      else if(sevens.length) winners = pickWinners(sevens, wanted);
-      else{
-        const allowed = idsAll.filter(id=>!banned.has(id));
-        winners = allowed.length ? pickWinners(allowed, wanted) : pickWinners(idsAll, wanted);
-      }
-    }else{
-      const groupCount = selectorValue;
+    if(eights.length) winners = pickWinners(eights, wanted);
+    else if(sevens.length) winners = pickWinners(sevens, wanted);
+    else{
       const allowed = idsAll.filter(id=>!banned.has(id));
-      const pool = allowed.length ? allowed : idsAll;
-
-      const groups = assignGroups(pool, groupCount);
-      let winnerGroupIndex = rand(groups.length);
-
-      const target = eights.find(id=>pool.includes(id)) || sevens.find(id=>pool.includes(id));
-      if(target){
-        for(let i=0;i<groups.length;i++){
-          if(groups[i].includes(target)){ winnerGroupIndex=i; break; }
-        }
-      }
-      winners = groups[winnerGroupIndex].slice();
+      winners = allowed.length ? pickWinners(allowed, wanted) : pickWinners(idsAll, wanted);
     }
 
-    winnersVisible = new Set(winners);
-    winnerColors = winners.map(id => fingers.get(id)?.color).filter(Boolean);
+    const colors = winners.map(id => fingers.get(id)?.realColor).filter(Boolean);
+    showWinOverlay(colors.length ? colors : ["#000"]);
 
-    // VICTORIA: overlay con 1–4 colores, compartiendo pantalla
-    showWinOverlay(winnerColors.length ? winnerColors : ["#000"]);
+    setHiddenTextColor(colors[0] || "#000");
 
-    // texto secreto “camuflado” con el primer color
-    setHintColorWhenWin(true, winnerColors[0] || "#000");
-
-    // Entrar en winnerFreeze y borrar todo lo demás
     state = "winnerFreeze";
     for(const [id] of dots) removeDot(id);
 
-    clearTimeout(timer);
     timer = setTimeout(() => {
       hideWinOverlay();
-      setHintColorWhenWin(false);
-
+      setHiddenTextColor("#000");
       state = "waiting";
       stateEl.textContent = "esperando";
-      winnersVisible = new Set();
-      winnerColors = [];
-
       renderLive();
-    }, FILL_MS);
+    }, REVEAL_MS);
   }
 
   // ---- Touch logic (reinicia 4s si entra o sale un dedo) ----
@@ -527,11 +549,13 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
     e.preventDefault();
     let changed=false;
 
+    if(state==="winnerFreeze" || state==="groupsReveal") return; // durante resultado, bloquea
+
     for(const t of e.changedTouches){
       const id = t.identifier;
 
       if(!fingers.has(id) && fingers.size < MAX){
-        fingers.set(id,{x:t.clientX,y:t.clientY,taps:0,color:null,path:[],eightLocked:false,wLocked:false});
+        fingers.set(id,{x:t.clientX,y:t.clientY,realColor:null,displayColor:null,taps:0,path:[],eightLocked:false,wLocked:false});
         changed=true;
       }
 
@@ -547,21 +571,19 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
     }
 
     if(changed && state==="running"){
-      ensureUniqueColorsStable();
+      ensureUniqueRealColors();
       restartRoundTimer();
     }
 
     lastCount=fingers.size;
 
-    if(state!=="winnerFreeze"){
-      ensureUniqueColorsStable();
-      renderLive();
-    }
+    ensureUniqueRealColors();
+    renderLive();
   },{passive:false});
 
   zone.addEventListener("touchmove", e=>{
     e.preventDefault();
-    if(state==="winnerFreeze") return;
+    if(state==="winnerFreeze" || state==="groupsReveal") return;
 
     for(const t of e.changedTouches){
       const f=fingers.get(t.identifier);
@@ -574,42 +596,44 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
 
   zone.addEventListener("touchend", e=>{
     e.preventDefault();
-    let changed=false;
+    if(state==="winnerFreeze" || state==="groupsReveal") return;
 
+    let changed=false;
     for(const t of e.changedTouches){
       if(fingers.has(t.identifier)){
         fingers.delete(t.identifier);
-        if(state!=="winnerFreeze") removeDot(t.identifier);
+        removeDot(t.identifier);
         changed=true;
       }
     }
     lastCount=fingers.size;
 
     if(changed && state==="running"){
-      ensureUniqueColorsStable();
+      ensureUniqueRealColors();
       restartRoundTimer();
-      renderLive();
     }
+    renderLive();
   },{passive:false});
 
   zone.addEventListener("touchcancel", e=>{
     e.preventDefault();
-    let changed=false;
+    if(state==="winnerFreeze" || state==="groupsReveal") return;
 
+    let changed=false;
     for(const t of e.changedTouches){
       if(fingers.has(t.identifier)){
         fingers.delete(t.identifier);
-        if(state!=="winnerFreeze") removeDot(t.identifier);
+        removeDot(t.identifier);
         changed=true;
       }
     }
     lastCount=fingers.size;
 
     if(changed && state==="running"){
-      ensureUniqueColorsStable();
+      ensureUniqueRealColors();
       restartRoundTimer();
-      renderLive();
     }
+    renderLive();
   },{passive:false});
 
   // ---- Modal UI ----
@@ -646,7 +670,7 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
   // init
   modal.style.setProperty("--accent", "var(--green)");
   stateEl.textContent="esperando";
-  setHintColorWhenWin(false);
+  setHiddenTextColor("#000");
   updateUI();
 })();
 </script>
