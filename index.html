@@ -11,9 +11,6 @@
 html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-apple-system,system-ui,sans-serif; }
 #zone{ height:100%; touch-action:none; user-select:none; -webkit-user-select:none; }
 
-#colorFill{position:fixed;inset:0;opacity:0;transition:opacity .22s;z-index:1;pointer-events:none;}
-#colorFill.on{opacity:1;}
-
 #topbar{
   position:fixed;top:12px;left:12px;right:12px;z-index:10;
   display:flex;justify-content:space-between;align-items:flex-start;gap:12px;
@@ -37,7 +34,7 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
   -webkit-tap-highlight-color:transparent;
 }
 
-/* texto escondido abajo derecha + estado arriba (mismo color siempre) */
+/* texto “secreto” abajo derecha + estado arriba (mismo color siempre) */
 #hint{
   position:fixed;right:10px;bottom:10px;font-size:11px;
   color:#000;opacity:.6;z-index:20;user-select:none;pointer-events:none;
@@ -148,30 +145,63 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
   filter:blur(2px) brightness(.9);
 }
 
-/* Ganador: donut negro + borde color + pop */
-@keyframes winPop{
-  0%{transform:translate(-50%,-50%) scale(1.18)}
-  100%{transform:translate(-50%,-50%) scale(1.05)}
+/* =========================
+   WIN OVERLAY (victoria captura)
+   ========================= */
+#winOverlay{
+  position:fixed; inset:0;
+  z-index:8; /* por encima de dots (5) y por debajo de topbar (10) */
+  display:none;
 }
-.dot.win{
-  background:#000 !important;
-  box-shadow:none;
-  opacity:1;
+#winOverlay.on{ display:grid; }
+
+.winCell{
+  position:relative;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+}
+.winDonut{
+  --c:#00ff00;
+  --bg:#00aa00;
+  width:min(260px, 56vw);
+  aspect-ratio:1/1;
+  border-radius:50%;
+  background:#000;
+  position:relative;
+  filter:drop-shadow(0 10px 30px rgba(0,0,0,.25));
   animation:winPop .22s ease-out forwards;
 }
-.dot.win::after{
-  opacity:1;
-  -webkit-mask:none; mask:none;
+
+/* aro verde (gordo) */
+.winDonut::before{
+  content:"";
+  position:absolute;
+  inset:28%;
+  border-radius:50%;
+  box-shadow: inset 0 0 0 16px var(--c);
   background:transparent;
-  inset:0;border-radius:50%;
-  box-shadow: inset 0 0 0 10px var(--c), inset 0 0 0 18px #000;
 }
-.dot.win::before{ opacity:1; }
+
+/* centro con color del fondo + aro negro fino */
+.winDonut::after{
+  content:"";
+  position:absolute;
+  inset:42%;
+  border-radius:50%;
+  background:var(--bg);
+  box-shadow: inset 0 0 0 10px #000;
+}
+
+@keyframes winPop{
+  0%{ transform:scale(1.18); }
+  100%{ transform:scale(1.05); }
+}
 </style>
 </head>
 
 <body>
-<div id="colorFill"></div>
+<div id="winOverlay"></div>
 
 <div id="topbar">
   <button id="winBtn" aria-label="Ganadores">1F</button>
@@ -200,9 +230,9 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
 <script>
 (() => {
   const zone = document.getElementById("zone");
-  const colorFill = document.getElementById("colorFill");
   const hintEl = document.getElementById("hint");
   const stateEl = document.getElementById("state");
+  const winOverlay = document.getElementById("winOverlay");
 
   // UI modal
   const winBtn = document.getElementById("winBtn");
@@ -230,9 +260,8 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
   let timer = null;
   let lastCount = 0;
 
-  // Winner freeze: SOLO se dibujan estos IDs
   let winnersVisible = new Set();
-  let winnerColors = [];      // <- AHORA GUARDAMOS TODOS LOS COLORES GANADORES
+  let winnerColors = [];  // colores por ganador (para overlay)
 
   const rand = n => Math.floor(Math.random()*n);
   const shuffle = a => { a=a.slice(); for(let i=a.length-1;i;i--){ const j=rand(i+1); [a[i],a[j]]=[a[j],a[i]]; } return a; };
@@ -249,7 +278,7 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
     hintEl.style.color = color;
     stateEl.style.color = color;
   }
-  function setHintColorWhenFill(on, color){
+  function setHintColorWhenWin(on, color){
     setHiddenTextColor(on ? (color || "#000") : "#000");
   }
 
@@ -282,28 +311,10 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
 
   function renderLive(){
     if(state === "winnerFreeze"){
-      // Solo ganador(es). Los demás, aunque sigan tocando, NO se dibujan.
-      for(const [id,f] of fingers){
-        if(!winnersVisible.has(id)){
-          removeDot(id);
-          continue;
-        }
-        const el = ensureDot(id);
-        el.style.left = f.x+"px";
-        el.style.top  = f.y+"px";
-        const c = f.color || winnerColors[0] || "#000";
-        el.style.setProperty("--c", c);
-        el.style.background = c;
-        el.classList.remove("running","lose");
-        el.classList.add("win");
-      }
-      for(const [id] of dots){
-        if(!winnersVisible.has(id)) removeDot(id);
-      }
+      // Durante victoria NO renderizamos dots (solo overlay).
+      for(const [id] of dots) removeDot(id);
       return;
     }
-
-    // Normal: dibuja todos
     for(const [id,f] of fingers){
       const el = ensureDot(id);
       el.style.left = f.x+"px";
@@ -329,17 +340,14 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
     if(fingers.size < 2) return;
     state = "running";
     stateEl.textContent = "jugando";
-
     for(const f of fingers.values()){
       f.taps = 0;
       f.path = [];
       f.eightLocked = false;
       f.wLocked = false;
     }
-
     ensureUniqueColorsStable();
     renderLive();
-
     clearTimeout(timer);
     timer = setTimeout(endRound, ROUND_MS);
   }
@@ -415,15 +423,37 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
     return groups;
   }
 
-  // ✅ Fondo: 1 color => sólido; varios => degradado
-  function setFillFromColors(colors){
-    const cs = (colors || []).filter(Boolean);
-    if(cs.length <= 1){
-      colorFill.style.background = cs[0] || "#000";
-      return;
+  function showWinOverlay(colors){
+    winOverlay.innerHTML = "";
+    winOverlay.classList.add("on");
+
+    const n = Math.max(1, Math.min(4, colors.length || 1));
+    const cols = (n === 1) ? 1 : (n === 2 ? 2 : 2);
+    const rows = (n <= 2) ? 1 : 2;
+
+    winOverlay.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
+    winOverlay.style.gridTemplateRows = `repeat(${rows}, 1fr)`;
+
+    for(let i=0;i<cols*rows;i++){
+      const c = colors[i] || colors[0] || "#000";
+      const cell = document.createElement("div");
+      cell.className = "winCell";
+      cell.style.background = c;
+
+      // donut como tu captura
+      const donut = document.createElement("div");
+      donut.className = "winDonut";
+      donut.style.setProperty("--c", c);
+      donut.style.setProperty("--bg", c);
+
+      cell.appendChild(donut);
+      winOverlay.appendChild(cell);
     }
-    const stops = cs.map((c,i)=>`${c} ${Math.round(i/(cs.length-1)*100)}%`).join(", ");
-    colorFill.style.background = `linear-gradient(135deg, ${stops})`;
+  }
+
+  function hideWinOverlay(){
+    winOverlay.classList.remove("on");
+    winOverlay.innerHTML = "";
   }
 
   function endRound(){
@@ -442,7 +472,6 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
 
     if(mode==="fingers"){
       const wanted = selectorValue;
-
       if(eights.length) winners = pickWinners(eights, wanted);
       else if(sevens.length) winners = pickWinners(sevens, wanted);
       else{
@@ -466,38 +495,29 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
       winners = groups[winnerGroupIndex].slice();
     }
 
-    // --- Congelar victoria: SOLO ganador(es) visible(s) ---
     winnersVisible = new Set(winners);
-
-    // ✅ COLORES del fondo: TODOS los ganadores (fingers o grupo)
     winnerColors = winners.map(id => fingers.get(id)?.color).filter(Boolean);
 
-    setFillFromColors(winnerColors);
-    colorFill.classList.add("on");
+    // VICTORIA: overlay con 1–4 colores, compartiendo pantalla
+    showWinOverlay(winnerColors.length ? winnerColors : ["#000"]);
 
-    // texto “camuflado” usa el primer color (si es degradado, no hay uno perfecto)
-    setHintColorWhenFill(true, winnerColors[0] || "#000");
+    // texto secreto “camuflado” con el primer color
+    setHintColorWhenWin(true, winnerColors[0] || "#000");
 
     // Entrar en winnerFreeze y borrar todo lo demás
     state = "winnerFreeze";
-    for(const [id] of dots){
-      if(!winnersVisible.has(id)) removeDot(id);
-    }
-    renderLive();
+    for(const [id] of dots) removeDot(id);
 
     clearTimeout(timer);
     timer = setTimeout(() => {
-      // volver a negro
-      colorFill.classList.remove("on");
-      setHintColorWhenFill(false);
+      hideWinOverlay();
+      setHintColorWhenWin(false);
 
-      // volver a normal
       state = "waiting";
       stateEl.textContent = "esperando";
       winnersVisible = new Set();
       winnerColors = [];
 
-      // si siguen dedos tocando, reaparecen para siguiente ronda
       renderLive();
     }, FILL_MS);
   }
@@ -535,12 +555,14 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
 
     if(state!=="winnerFreeze"){
       ensureUniqueColorsStable();
+      renderLive();
     }
-    renderLive();
   },{passive:false});
 
   zone.addEventListener("touchmove", e=>{
     e.preventDefault();
+    if(state==="winnerFreeze") return;
+
     for(const t of e.changedTouches){
       const f=fingers.get(t.identifier);
       if(!f) continue;
@@ -561,14 +583,13 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
         changed=true;
       }
     }
-
     lastCount=fingers.size;
 
     if(changed && state==="running"){
       ensureUniqueColorsStable();
       restartRoundTimer();
+      renderLive();
     }
-    renderLive();
   },{passive:false});
 
   zone.addEventListener("touchcancel", e=>{
@@ -582,14 +603,13 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
         changed=true;
       }
     }
-
     lastCount=fingers.size;
 
     if(changed && state==="running"){
       ensureUniqueColorsStable();
       restartRoundTimer();
+      renderLive();
     }
-    renderLive();
   },{passive:false});
 
   // ---- Modal UI ----
@@ -625,8 +645,8 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
 
   // init
   modal.style.setProperty("--accent", "var(--green)");
-  setHintColorWhenFill(false);
   stateEl.textContent="esperando";
+  setHintColorWhenWin(false);
   updateUI();
 })();
 </script>
