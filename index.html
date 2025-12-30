@@ -85,7 +85,7 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
 .segBtn.active{ background:var(--accent); color:#fff; }
 
 /* =========================
-   DOT + AROS (animación 4s)
+   DOT + AROS
    ========================= */
 .dot{
   --c:#ff3b30;      /* color del aro */
@@ -151,15 +151,24 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
   filter:blur(2px) brightness(.9);
 }
 
-/* Ganador: pop (sin centro negro) */
+/* Ganador estilo captura (círculo negro + aro de color) */
 @keyframes winPop{
   0%{transform:translate(-50%,-50%) scale(1.18)}
   100%{transform:translate(-50%,-50%) scale(1.05)}
 }
 .dot.win{
+  background:#000 !important;
+  box-shadow:none;
   opacity:1;
   animation:winPop .22s ease-out forwards;
-  box-shadow:none;
+}
+/* aro interior de color + aro negro fino */
+.dot.win::after{
+  opacity:1;
+  -webkit-mask:none; mask:none;
+  background:transparent;
+  inset:0;border-radius:50%;
+  box-shadow: inset 0 0 0 10px var(--c), inset 0 0 0 18px #000;
 }
 </style>
 </head>
@@ -218,7 +227,7 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
   let selectorValue = 1;      // Fingers: nº ganadores (1–4). Groups: nº grupos (1–4)
   let mode = "fingers";       // fingers | groups
 
-  // id -> {x,y,realColor,taps,path,eightLocked,wLocked,groupIndex}
+  // id -> {x,y,realColor,taps,path,eightLocked,wLocked,groupColor}
   const fingers = new Map();
   const dots = new Map();
 
@@ -228,7 +237,6 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
   let resultTimer = null;
   let lastCount = 0;
 
-  // winner freeze
   let winnersVisible = new Set();
   let winnerColors = [];
 
@@ -266,7 +274,7 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
     }
   }
 
-  function mixWithWhite(hex, t){ // t 0..1
+  function mixWithWhite(hex, t){
     const h = hex.replace("#","");
     const r = parseInt(h.slice(0,2),16), g = parseInt(h.slice(2,4),16), b = parseInt(h.slice(4,6),16);
     const rr = Math.round(r + (255-r)*t);
@@ -298,7 +306,7 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
   }
 
   function renderLive(){
-    // En winnerFreeze: SOLO ganadores (en su posición) + fondo teñido
+    // WinnerFreeze: solo ganadores, en su posición
     if(state === "winnerFreeze"){
       for(const [id,f] of fingers){
         if(!winnersVisible.has(id)){
@@ -322,18 +330,17 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
       return;
     }
 
-    // En groupsReveal: mostrar todos con colores de grupo (fondo negro)
+    // Groups reveal: todos con color de grupo
     if(state === "groupsReveal"){
       for(const [id,f] of fingers){
         const el = ensureDot(id);
         el.style.left = f.x+"px";
         el.style.top  = f.y+"px";
 
-        const groupColor = f.groupIndexColor || "#e8e8e8";
-        // aro un pelín más claro, como “borde” suave de tus capturas
-        const ring = mixWithWhite(groupColor, 0.25);
+        const gc = f.groupColor || "#e8e8e8";
+        const ring = mixWithWhite(gc, 0.25);
 
-        el.style.setProperty("--fill", groupColor);
+        el.style.setProperty("--fill", gc);
         el.style.setProperty("--c", ring);
 
         el.classList.remove("running","lose","win");
@@ -350,12 +357,12 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
       el.style.left = f.x+"px";
       el.style.top  = f.y+"px";
 
-      // ✅ Groups durante la cuenta: TODO BLANCO/GRIS
       if(mode === "groups" && state === "running"){
+        // Groups durante cuenta: blanco/gris
         el.style.setProperty("--fill", "#e8e8e8");
         el.style.setProperty("--c", "#bdbdbd");
       } else {
-        // Fingers normal: color real siempre
+        // Fingers normal
         const c = f.realColor || COLORS[0];
         el.style.setProperty("--fill", c);
         el.style.setProperty("--c", c);
@@ -386,7 +393,7 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
       f.path = [];
       f.eightLocked = false;
       f.wLocked = false;
-      f.groupIndexColor = null;
+      f.groupColor = null;
     }
 
     ensureUniqueRealColors();
@@ -459,31 +466,56 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
   function assignGroupsColors(groupCount){
     const ids = [...fingers.keys()];
     const g = Math.max(1, Math.min(4, groupCount));
-
     const groupColors = shuffle(COLORS).slice(0, g);
     const shuffledIds = shuffle(ids);
 
-    // Reparto round-robin -> 0..g-1
     let gi = 0;
     for(const id of shuffledIds){
       const f = fingers.get(id);
       if(!f) continue;
-      f.groupIndexColor = groupColors[gi];
+      f.groupColor = groupColors[gi];
       gi = (gi + 1) % g;
     }
+  }
+
+  function resetToWaiting(){
+    clearTimeout(roundTimer);
+    clearTimeout(resultTimer);
+    roundTimer = null;
+    resultTimer = null;
+
+    // quita fondo
+    colorFill.classList.remove("on");
+    setHintColorWhenFill(false);
+
+    // limpia estados
+    state = "waiting";
+    stateEl.textContent = "esperando";
+    winnersVisible = new Set();
+    winnerColors = [];
+
+    // limpia grupos
+    for(const f of fingers.values()) f.groupColor = null;
+
+    // si no hay dedos, borra todo
+    if(fingers.size === 0){
+      for(const [id] of dots) removeDot(id);
+    }
+
+    renderLive();
   }
 
   function endRound(){
     clearTimeout(roundTimer);
 
-    // ✅ GROUPS: reveal por colores SIN teñir fondo, y se quita a los 5s
+    // ✅ GROUPS: reveal + volver a jugar (sin refrescar)
     if(mode === "groups"){
       state = "groupsReveal";
       stateEl.textContent = "grupos";
 
       assignGroupsColors(selectorValue);
 
-      // fondo negro siempre
+      // fondo SIEMPRE negro
       colorFill.classList.remove("on");
       setHintColorWhenFill(false);
 
@@ -491,17 +523,15 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
 
       clearTimeout(resultTimer);
       resultTimer = setTimeout(() => {
-        // volver a “esperando”
-        state = "waiting";
-        stateEl.textContent = "esperando";
-        for(const f of fingers.values()) f.groupIndexColor = null;
-        renderLive();
+        // IMPORTANTE: volver a waiting y permitir otra ronda
+        // pero si siguen dedos tocando, esperamos a que levanten para empezar limpio
+        resetToWaiting();
       }, SHOW_MS);
 
       return;
     }
 
-    // ✅ FINGERS: ganador(es) en SU POSICIÓN + fondo teñido, perdedores desaparecen aunque sigan tocando
+    // ✅ FINGERS: ganador(es) en su posición + fondo teñido
     stateEl.textContent = "fin";
 
     const entries = [...fingers.entries()];
@@ -526,7 +556,6 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
     winnersVisible = new Set(winners);
     winnerColors = winners.map(id => fingers.get(id)?.realColor).filter(Boolean);
 
-    // fondo teñido (si varios -> degradado)
     setFillFromWinnerColors(winnerColors);
     colorFill.classList.add("on");
     setHintColorWhenFill(true, winnerColors[0] || "#000");
@@ -536,24 +565,15 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
 
     clearTimeout(resultTimer);
     resultTimer = setTimeout(() => {
-      // volver a negro y a jugar
-      colorFill.classList.remove("on");
-      setHintColorWhenFill(false);
-
-      state = "waiting";
-      stateEl.textContent = "esperando";
-      winnersVisible = new Set();
-      winnerColors = [];
-
-      renderLive();
+      resetToWaiting();
     }, SHOW_MS);
   }
 
-  // ---- Touch logic (reinicia 4s si entra o sale un dedo) ----
+  // ---- Touch logic ----
   zone.addEventListener("touchstart", e=>{
     e.preventDefault();
 
-    // durante resultados, ignoramos input
+    // durante resultado, ignorar
     if(state==="winnerFreeze" || state==="groupsReveal") return;
 
     let changed=false;
@@ -567,7 +587,7 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
           realColor:null,
           taps:0, path:[],
           eightLocked:false, wLocked:false,
-          groupIndexColor:null
+          groupColor:null
         });
         changed=true;
       }
@@ -582,10 +602,12 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
       }
     }
 
+    // empezar solo al llegar al 2º dedo
     if(state==="waiting" && lastCount<2 && fingers.size>=2){
       startRound();
     }
 
+    // reiniciar cuenta si cambian dedos
     if(changed && state==="running"){
       ensureUniqueRealColors();
       restartRoundTimer();
