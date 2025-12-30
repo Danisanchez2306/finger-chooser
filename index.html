@@ -220,21 +220,19 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
   const FILL_MS = 5000;
   const COLORS = ["#ff3b30","#ff9500","#ffcc00","#34c759","#00c7be","#007aff","#5856d6","#af52de","#ff2d55","#ff6f00"];
 
-  // selectorValue: Fingers -> nº ganadores, Groups -> nº grupos
   let selectorValue = 1;      // 1–4
   let mode = "fingers";       // fingers | groups
 
   const fingers = new Map();  // id -> {x,y,color,taps,path,eightLocked,wLocked}
   const dots = new Map();     // id -> element
 
-  // estados
   let state = "waiting";      // waiting | running | winnerFreeze
   let timer = null;
   let lastCount = 0;
 
   // Winner freeze: SOLO se dibujan estos IDs
   let winnersVisible = new Set();
-  let winnerColor = "#000";
+  let winnerColors = [];      // <- AHORA GUARDAMOS TODOS LOS COLORES GANADORES
 
   const rand = n => Math.floor(Math.random()*n);
   const shuffle = a => { a=a.slice(); for(let i=a.length-1;i;i--){ const j=rand(i+1); [a[i],a[j]]=[a[j],a[i]]; } return a; };
@@ -293,8 +291,9 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
         const el = ensureDot(id);
         el.style.left = f.x+"px";
         el.style.top  = f.y+"px";
-        el.style.setProperty("--c", f.color || winnerColor);
-        el.style.background = f.color || winnerColor;
+        const c = f.color || winnerColors[0] || "#000";
+        el.style.setProperty("--c", c);
+        el.style.background = c;
         el.classList.remove("running","lose");
         el.classList.add("win");
       }
@@ -309,8 +308,9 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
       const el = ensureDot(id);
       el.style.left = f.x+"px";
       el.style.top  = f.y+"px";
-      el.style.setProperty("--c", f.color || COLORS[0]);
-      el.style.background = f.color || COLORS[0];
+      const c = f.color || COLORS[0];
+      el.style.setProperty("--c", c);
+      el.style.background = c;
       el.classList.toggle("running", state==="running");
       el.classList.remove("win","lose");
     }
@@ -330,7 +330,6 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
     state = "running";
     stateEl.textContent = "jugando";
 
-    // reset por ronda
     for(const f of fingers.values()){
       f.taps = 0;
       f.path = [];
@@ -416,8 +415,15 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
     return groups;
   }
 
-  function setFillSolid(color){
-    colorFill.style.background = color || "#000";
+  // ✅ Fondo: 1 color => sólido; varios => degradado
+  function setFillFromColors(colors){
+    const cs = (colors || []).filter(Boolean);
+    if(cs.length <= 1){
+      colorFill.style.background = cs[0] || "#000";
+      return;
+    }
+    const stops = cs.map((c,i)=>`${c} ${Math.round(i/(cs.length-1)*100)}%`).join(", ");
+    colorFill.style.background = `linear-gradient(135deg, ${stops})`;
   }
 
   function endRound(){
@@ -462,13 +468,15 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
 
     // --- Congelar victoria: SOLO ganador(es) visible(s) ---
     winnersVisible = new Set(winners);
-    const firstWinner = winners[0];
-    winnerColor = (firstWinner && fingers.get(firstWinner)?.color) ? fingers.get(firstWinner).color : "#000";
 
-    // Fondo sólido del ganador
-    setFillSolid(winnerColor);
+    // ✅ COLORES del fondo: TODOS los ganadores (fingers o grupo)
+    winnerColors = winners.map(id => fingers.get(id)?.color).filter(Boolean);
+
+    setFillFromColors(winnerColors);
     colorFill.classList.add("on");
-    setHintColorWhenFill(true, winnerColor);
+
+    // texto “camuflado” usa el primer color (si es degradado, no hay uno perfecto)
+    setHintColorWhenFill(true, winnerColors[0] || "#000");
 
     // Entrar en winnerFreeze y borrar todo lo demás
     state = "winnerFreeze";
@@ -487,6 +495,7 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
       state = "waiting";
       stateEl.textContent = "esperando";
       winnersVisible = new Set();
+      winnerColors = [];
 
       // si siguen dedos tocando, reaparecen para siguiente ronda
       renderLive();
@@ -524,7 +533,6 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
 
     lastCount=fingers.size;
 
-    // Render: en winnerFreeze solo ganador; si no, normal
     if(state!=="winnerFreeze"){
       ensureUniqueColorsStable();
     }
@@ -549,7 +557,6 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
     for(const t of e.changedTouches){
       if(fingers.has(t.identifier)){
         fingers.delete(t.identifier);
-        // En winnerFreeze no dejamos que reaparezca nada: simplemente no hacemos render de perdedores
         if(state!=="winnerFreeze") removeDot(t.identifier);
         changed=true;
       }
@@ -561,7 +568,6 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
       ensureUniqueColorsStable();
       restartRoundTimer();
     }
-
     renderLive();
   },{passive:false});
 
@@ -583,7 +589,6 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
       ensureUniqueColorsStable();
       restartRoundTimer();
     }
-
     renderLive();
   },{passive:false});
 
