@@ -88,8 +88,8 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
    DOT + AROS
    ========================= */
 .dot{
-  --c:#ff3b30;      /* color del aro */
-  --fill:#ff3b30;   /* color del círculo */
+  --c:#ff3b30;
+  --fill:#ff3b30;
   position:fixed;
   width:130px;height:130px;border-radius:50%;
   transform:translate(-50%,-50%);
@@ -144,14 +144,14 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
 @keyframes ringBreathe{ 0%,100%{ filter:brightness(1); } 50%{ filter:brightness(1.12); } }
 @keyframes ringBreathe2{ 0%,100%{ opacity:.45; } 50%{ opacity:.75; } }
 
-/* Perdedor: desaparece suave */
+/* Perdedor */
 .dot.lose{
   opacity:0;
   transform:translate(-50%,-50%) scale(.78);
   filter:blur(2px) brightness(.9);
 }
 
-/* Ganador estilo captura (círculo negro + aro de color) */
+/* Ganador: círculo negro + aro color */
 @keyframes winPop{
   0%{transform:translate(-50%,-50%) scale(1.18)}
   100%{transform:translate(-50%,-50%) scale(1.05)}
@@ -224,15 +224,13 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
 
   const COLORS = ["#ff3b30","#ff9500","#ffcc00","#34c759","#00c7be","#007aff","#5856d6","#af52de","#ff2d55","#ff6f00"];
 
-  let selectorValue = 1;      // Fingers: nº ganadores (1–4). Groups: nº grupos (1–4)
-  let mode = "fingers";       // fingers | groups
+  let selectorValue = 1;
+  let mode = "fingers";
 
-  // id -> {x,y,realColor,taps,path,eightLocked,wLocked,groupColor}
-  const fingers = new Map();
-  const dots = new Map();
+  const fingers = new Map(); // id -> {x,y,realColor,taps,path,eightLocked,wLocked,groupColor}
+  const dots = new Map();    // id -> element
 
-  // states: waiting | running | winnerFreeze | groupsReveal
-  let state = "waiting";
+  let state = "waiting";     // waiting | running | winnerFreeze | groupsReveal
   let roundTimer = null;
   let resultTimer = null;
   let lastCount = 0;
@@ -268,10 +266,8 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
     return d;
   }
   function removeDot(id){
-    if(dots.has(id)){
-      dots.get(id).remove();
-      dots.delete(id);
-    }
+    const el = dots.get(id);
+    if(el){ el.remove(); dots.delete(id); }
   }
 
   function mixWithWhite(hex, t){
@@ -305,8 +301,34 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
     }
   }
 
+  function clearAllDots(){
+    for(const [id] of dots) removeDot(id);
+  }
+
+  // ✅ RESET DURO: evita “dedos fantasma” y congelaciones iOS
+  function hardReset(){
+    clearTimeout(roundTimer);
+    clearTimeout(resultTimer);
+    roundTimer = null;
+    resultTimer = null;
+
+    // limpiar fondo
+    colorFill.classList.remove("on");
+    setHintColorWhenFill(false);
+
+    // limpiar estructuras
+    fingers.clear();
+    clearAllDots();
+    lastCount = 0;
+
+    winnersVisible = new Set();
+    winnerColors = [];
+
+    state = "waiting";
+    stateEl.textContent = "esperando";
+  }
+
   function renderLive(){
-    // WinnerFreeze: solo ganadores, en su posición
     if(state === "winnerFreeze"){
       for(const [id,f] of fingers){
         if(!winnersVisible.has(id)){
@@ -330,7 +352,6 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
       return;
     }
 
-    // Groups reveal: todos con color de grupo
     if(state === "groupsReveal"){
       for(const [id,f] of fingers){
         const el = ensureDot(id);
@@ -351,18 +372,15 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
       return;
     }
 
-    // Normal / running
     for(const [id,f] of fingers){
       const el = ensureDot(id);
       el.style.left = f.x+"px";
       el.style.top  = f.y+"px";
 
       if(mode === "groups" && state === "running"){
-        // Groups durante cuenta: blanco/gris
         el.style.setProperty("--fill", "#e8e8e8");
         el.style.setProperty("--c", "#bdbdbd");
       } else {
-        // Fingers normal
         const c = f.realColor || COLORS[0];
         el.style.setProperty("--fill", c);
         el.style.setProperty("--c", c);
@@ -478,44 +496,15 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
     }
   }
 
-  function resetToWaiting(){
-    clearTimeout(roundTimer);
-    clearTimeout(resultTimer);
-    roundTimer = null;
-    resultTimer = null;
-
-    // quita fondo
-    colorFill.classList.remove("on");
-    setHintColorWhenFill(false);
-
-    // limpia estados
-    state = "waiting";
-    stateEl.textContent = "esperando";
-    winnersVisible = new Set();
-    winnerColors = [];
-
-    // limpia grupos
-    for(const f of fingers.values()) f.groupColor = null;
-
-    // si no hay dedos, borra todo
-    if(fingers.size === 0){
-      for(const [id] of dots) removeDot(id);
-    }
-
-    renderLive();
-  }
-
   function endRound(){
     clearTimeout(roundTimer);
 
-    // ✅ GROUPS: reveal + volver a jugar (sin refrescar)
     if(mode === "groups"){
       state = "groupsReveal";
       stateEl.textContent = "grupos";
 
       assignGroupsColors(selectorValue);
 
-      // fondo SIEMPRE negro
       colorFill.classList.remove("on");
       setHintColorWhenFill(false);
 
@@ -523,15 +512,13 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
 
       clearTimeout(resultTimer);
       resultTimer = setTimeout(() => {
-        // IMPORTANTE: volver a waiting y permitir otra ronda
-        // pero si siguen dedos tocando, esperamos a que levanten para empezar limpio
-        resetToWaiting();
+        // ✅ volver limpio SIEMPRE
+        hardReset();
       }, SHOW_MS);
 
       return;
     }
 
-    // ✅ FINGERS: ganador(es) en su posición + fondo teñido
     stateEl.textContent = "fin";
 
     const entries = [...fingers.entries()];
@@ -565,7 +552,8 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
 
     clearTimeout(resultTimer);
     resultTimer = setTimeout(() => {
-      resetToWaiting();
+      // ✅ volver limpio SIEMPRE
+      hardReset();
     }, SHOW_MS);
   }
 
@@ -602,12 +590,10 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
       }
     }
 
-    // empezar solo al llegar al 2º dedo
     if(state==="waiting" && lastCount<2 && fingers.size>=2){
       startRound();
     }
 
-    // reiniciar cuenta si cambian dedos
     if(changed && state==="running"){
       ensureUniqueRealColors();
       restartRoundTimer();
