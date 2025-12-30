@@ -208,7 +208,6 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
   let selectorValue = 1;
   let mode = "fingers";
 
-  // id -> finger
   const fingers = new Map();
   const dots = new Map();
 
@@ -217,11 +216,9 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
   let roundTimer = null;
   let holdTimer = null;
 
-  // Fingers resultado
   let winnersSet = new Set();
   let winnerColors = [];
 
-  // Snapshot para postHold (quieto 5s)
   // [{x,y, fill, ring, isWin}]
   let holdSnapshot = [];
 
@@ -240,8 +237,18 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
     hintEl.style.color = color;
     stateEl.style.color = color;
   }
-  function setHintColorWhenFill(on, color){
-    setHiddenTextColor(on ? (color || "#000") : "#000");
+
+  // ✅ NUEVO: si hay degradado (2+ ganadores), texto transparente (invisible)
+  function setSecretTextForWinnerBackground(colors){
+    if(!colors || colors.length === 0){
+      setHiddenTextColor("#000");
+      return;
+    }
+    if(colors.length > 1){
+      setHiddenTextColor("transparent");
+      return;
+    }
+    setHiddenTextColor(colors[0] || "#000");
   }
 
   function ensureDot(key){
@@ -302,7 +309,7 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
     winnerColors = [];
     holdSnapshot = [];
     colorFill.classList.remove("on");
-    setHintColorWhenFill(false);
+    setHiddenTextColor("#000"); // ✅ vuelve a negro
     state = "waiting";
     stateEl.textContent = "esperando";
     fingers.clear();
@@ -404,7 +411,7 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
       state = "groupsLive";
       stateEl.textContent = "grupos";
       colorFill.classList.remove("on");
-      setHintColorWhenFill(false);
+      setHiddenTextColor("#000"); // siempre negro en groups
       render();
       return;
     }
@@ -430,7 +437,7 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
 
     setFillFromWinnerColors(winnerColors);
     colorFill.classList.add("on");
-    setHintColorWhenFill(true, winnerColors[0] || "#000");
+    setSecretTextForWinnerBackground(winnerColors); // ✅ aquí el cambio
 
     state = "winnerLive";
     stateEl.textContent = "fin";
@@ -460,16 +467,15 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
   }
 
   function enterPostHoldAndReset(){
-    // se llama cuando ya NO hay dedos
     buildHoldSnapshot();
-    // limpiamos estructura fingers (pero mantenemos snapshot)
     fingers.clear();
     clearTimeout(holdTimer);
 
     state = "postHold";
     stateEl.textContent = "esperando";
 
-    // dibuja snapshot quieto SIN animación
+    // stop animación
+    for(const [,el] of dots) el.classList.remove("running");
     render();
 
     holdTimer = setTimeout(() => {
@@ -478,7 +484,6 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
   }
 
   function render(){
-    // postHold: dibuja snapshot quieto sin animación
     if(state === "postHold"){
       clearAllDots();
       for(let i=0;i<holdSnapshot.length;i++){
@@ -489,14 +494,13 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
         el.style.top  = s.y+"px";
         el.style.setProperty("--fill", s.fill);
         el.style.setProperty("--c", s.ring);
-        el.classList.remove("running","lose");
+        el.classList.remove("running");
         if(s.isWin) el.classList.add("win");
         else el.classList.remove("win");
       }
       return;
     }
 
-    // waiting/running
     if(state === "waiting" || state === "running"){
       for(const [id,f] of fingers){
         const el = ensureDot(id);
@@ -513,7 +517,7 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
         }
 
         el.classList.toggle("running", state==="running");
-        el.classList.remove("win","lose");
+        el.classList.remove("win");
       }
       for(const [k] of dots){
         if(!fingers.has(k)) removeDot(k);
@@ -521,13 +525,10 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
       return;
     }
 
-    // winnerLive: SOLO ganadores, animando y moviéndose
     if(state === "winnerLive"){
-      // borra NO-ganadores (incluye que si quedaron dots viejos se vayan)
       for(const [k] of dots){
         if(!winnersSet.has(k)) removeDot(k);
       }
-      // y borra de pantalla cualquier dedo que no sea ganador
       for(const [id,f] of fingers){
         if(!winnersSet.has(id)){
           removeDot(id);
@@ -540,12 +541,10 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
         el.style.setProperty("--fill", c);
         el.style.setProperty("--c", c);
         el.classList.add("win","running");
-        el.classList.remove("lose");
       }
       return;
     }
 
-    // groupsLive: todos con color de grupo, animando y moviéndose
     if(state === "groupsLive"){
       for(const [id,f] of fingers){
         const el = ensureDot(id);
@@ -555,7 +554,7 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
         el.style.setProperty("--fill", gc);
         el.style.setProperty("--c", mixWithWhite(gc, 0.25));
         el.classList.add("running");
-        el.classList.remove("win","lose");
+        el.classList.remove("win");
       }
       for(const [k] of dots){
         if(!fingers.has(k)) removeDot(k);
@@ -619,7 +618,6 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
         trackAndLockIfNeeded(f);
       }
 
-      // render rápido de ese dedo
       const el = ensureDot(t.identifier);
       el.style.left = f.x+"px";
       el.style.top  = f.y+"px";
@@ -638,7 +636,6 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
           el.classList.remove("win");
         }
       } else if(state==="winnerLive"){
-        // solo ganadores visibles
         if(winnersSet.has(t.identifier)){
           const c = f.realColor || winnerColors[0] || "#fff";
           el.style.setProperty("--fill", c);
@@ -662,28 +659,22 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
 
     for(const t of e.changedTouches){
       const id = t.identifier;
-
-      // antes de borrar, si estamos en live, actualizamos la última posición
       const f = fingers.get(id);
       if(f){
         f.x = t.clientX;
         f.y = t.clientY;
       }
-
       if(fingers.has(id)){
         fingers.delete(id);
         removeDot(id);
       }
     }
 
-    // si estaba corriendo y cambian dedos => reinicia cuenta
     if(state==="running"){
       restartRoundTimer();
     }
 
-    // si el resultado ya estaba decidido y ya no quedan dedos -> congelar snapshot 5s
     if((state==="winnerLive" || state==="groupsLive") && fingers.size===0){
-      // quita animación antes de snapshot
       for(const [,el] of dots) el.classList.remove("running");
       enterPostHoldAndReset();
       return;
@@ -730,7 +721,7 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
 
   // init
   stateEl.textContent="esperando";
-  setHintColorWhenFill(false);
+  setHiddenTextColor("#000");
   updateUI();
 })();
 </script>
