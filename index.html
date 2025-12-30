@@ -77,11 +77,11 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
 .segBtn.active{ background:var(--accent); color:#fff; }
 
 /* =========================
-   DOT + AROS (animación 4s)
+   DOT + AROS (animación)
    ========================= */
 .dot{
-  --c:#ff3b30;      /* color del aro */
-  --fill:#ff3b30;   /* color del círculo */
+  --c:#ff3b30;
+  --fill:#ff3b30;
   position:fixed;
   width:130px;height:130px;border-radius:50%;
   transform:translate(-50%,-50%);
@@ -89,10 +89,9 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
   z-index:5;
   background:var(--fill);
   box-shadow:0 0 36px rgba(255,255,255,.14);
-  transition:opacity .22s, transform .22s, filter .22s;
+  transition:opacity .18s, transform .18s, filter .18s;
 }
 
-/* ARO exterior */
 .dot::before{
   content:"";
   position:absolute; inset:-16px; border-radius:50%;
@@ -109,7 +108,6 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
   transform:rotate(0deg);
 }
 
-/* ARO interior */
 .dot::after{
   content:"";
   position:absolute; inset:-8px; border-radius:50%;
@@ -135,14 +133,13 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
 @keyframes ringBreathe{ 0%,100%{ filter:brightness(1); } 50%{ filter:brightness(1.12); } }
 @keyframes ringBreathe2{ 0%,100%{ opacity:.45; } 50%{ opacity:.75; } }
 
-/* Perdedor */
 .dot.lose{
   opacity:0;
   transform:translate(-50%,-50%) scale(.78);
   filter:blur(2px) brightness(.9);
 }
 
-/* Ganador: círculo negro + aro color */
+/* ganador: negro + aro color */
 @keyframes winPop{
   0%{transform:translate(-50%,-50%) scale(1.18)}
   100%{transform:translate(-50%,-50%) scale(1.05)}
@@ -211,29 +208,26 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
 
   const MAX = 5;
   const ROUND_MS = 4000;
-  const SHOW_MS = 5000;
+  const HOLD_MS = 5000;
 
   const COLORS = ["#ff3b30","#ff9500","#ffcc00","#34c759","#00c7be","#007aff","#5856d6","#af52de","#ff2d55","#ff6f00"];
 
-  let selectorValue = 1;      // Fingers: nº ganadores (1–4). Groups: nº grupos (1–4)
-  let mode = "fingers";       // fingers | groups
+  let selectorValue = 1; // Fingers: ganadores | Groups: nº grupos
+  let mode = "fingers";
 
   // id -> finger
-  // {x,y, realColor, taps, path, eightLocked, wLocked, groupColor}
   const fingers = new Map();
   const dots = new Map();
 
-  // waiting | running | winnerFreeze | groupsReveal
+  // states:
+  // waiting | running | winnerLive | groupsLive | postHold
   let state = "waiting";
   let roundTimer = null;
-  let resultTimer = null;
+  let holdTimer = null;
 
-  // Para evitar “fantasmas”: tras mostrar resultado, bloqueamos hasta que NO haya dedos
-  let lockUntilAllUp = false;
-
-  // Ganadores congelados (posiciones snapshot)
-  let winnersFrozen = []; // [{x,y,color}]
-  let winnerColors = [];
+  // Resultado decidido
+  let winnersSet = new Set(); // ids ganadores (Fingers)
+  let winnerColors = [];      // colores ganadores (Fingers)
 
   const rand = n => Math.floor(Math.random()*n);
   const shuffle = a => { a=a.slice(); for(let i=a.length-1;i;i--){ const j=rand(i+1); [a[i],a[j]]=[a[j],a[i]]; } return a; };
@@ -266,8 +260,10 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
     const el = dots.get(key);
     if(el){ el.remove(); dots.delete(key); }
   }
-  function clearAllDots(){
-    for(const [k] of dots) removeDot(k);
+  function clearDotsNotIn(idsSet){
+    for(const [k] of dots){
+      if(!idsSet.has(k)) removeDot(k);
+    }
   }
 
   function mixWithWhite(hex, t){
@@ -301,103 +297,30 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
     }
   }
 
-  function renderWaitingOrRunning(){
-    // En lockUntilAllUp: no enseñamos dedos aunque existan
-    if(lockUntilAllUp){
-      clearAllDots();
-      return;
-    }
-
-    for(const [id,f] of fingers){
-      const el = ensureDot(id);
-      el.style.left = f.x+"px";
-      el.style.top  = f.y+"px";
-
-      if(mode === "groups" && state === "running"){
-        el.style.setProperty("--fill", "#e8e8e8");
-        el.style.setProperty("--c", "#bdbdbd");
-      } else {
-        const c = f.realColor || COLORS[0];
-        el.style.setProperty("--fill", c);
-        el.style.setProperty("--c", c);
-      }
-
-      el.classList.toggle("running", state==="running");
-      el.classList.remove("lose","win");
-    }
-
-    for(const [id] of dots){
-      if(!fingers.has(id)) removeDot(id);
-    }
-  }
-
-  function renderWinnerFreeze(){
-    // Limpia dots “live” y dibuja SOLO winners congelados (con key "W0","W1"...)
-    clearAllDots();
-    for(let i=0;i<winnersFrozen.length;i++){
-      const w = winnersFrozen[i];
-      const key = "W"+i;
-      const el = ensureDot(key);
-      el.style.left = w.x+"px";
-      el.style.top  = w.y+"px";
-      el.style.setProperty("--fill", w.color);
-      el.style.setProperty("--c", w.color);
-      el.classList.remove("running","lose");
-      el.classList.add("win");
-    }
-  }
-
-  function renderGroupsReveal(){
-    clearAllDots();
-    // Dibuja todos por color de grupo (snapshot actual, pero sin depender de “running”)
-    for(const [id,f] of fingers){
-      const el = ensureDot(id);
-      el.style.left = f.x+"px";
-      el.style.top  = f.y+"px";
-      const gc = f.groupColor || "#e8e8e8";
-      el.style.setProperty("--fill", gc);
-      el.style.setProperty("--c", mixWithWhite(gc, 0.25));
-      el.classList.remove("running","lose","win");
-    }
-  }
-
-  function render(){
-    if(state === "winnerFreeze") return renderWinnerFreeze();
-    if(state === "groupsReveal") return renderGroupsReveal();
-    return renderWaitingOrRunning();
-  }
-
   function clearTimers(){
-    clearTimeout(roundTimer); roundTimer = null;
-    clearTimeout(resultTimer); resultTimer = null;
+    clearTimeout(roundTimer); roundTimer=null;
+    clearTimeout(holdTimer); holdTimer=null;
   }
 
   function goWaiting(){
     clearTimers();
-    colorFill.classList.remove("on");
-    setHintColorWhenFill(false);
-    winnersFrozen = [];
+    winnersSet = new Set();
     winnerColors = [];
-    state = "waiting";
-    stateEl.textContent = "esperando";
-    render();
-  }
-
-  function lockAndWaitAllUp(){
-    lockUntilAllUp = true;
-    // pantalla negra + sin dots
+    for(const f of fingers.values()) f.groupColor = null;
     colorFill.classList.remove("on");
     setHintColorWhenFill(false);
     state = "waiting";
     stateEl.textContent = "esperando";
+    // limpia dots si no hay dedos
+    if(fingers.size === 0){
+      for(const [k] of dots) removeDot(k);
+    }
     render();
-    // Se desbloquea automáticamente cuando fingers.size llegue a 0 (en touchend/cancel)
   }
 
   function startRound(){
-    if(lockUntilAllUp) return;
     if(fingers.size < 2) return;
-
+    clearTimers();
     state = "running";
     stateEl.textContent = "jugando";
 
@@ -408,11 +331,9 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
       f.wLocked = false;
       f.groupColor = null;
     }
-
     ensureUniqueRealColors();
     render();
 
-    clearTimeout(roundTimer);
     roundTimer = setTimeout(endRound, ROUND_MS);
   }
 
@@ -422,58 +343,39 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
     roundTimer = setTimeout(endRound, ROUND_MS);
   }
 
-  /* =========================
-     8 / W (PERMISIVO)
-     ========================= */
+  /* ===== 8 / W permisivo ===== */
   function isEight(path){
     if(path.length < 8) return false;
-
     let minX=Infinity,maxX=-Infinity,minY=Infinity,maxY=-Infinity;
     for(const p of path){
       minX=Math.min(minX,p.x); maxX=Math.max(maxX,p.x);
       minY=Math.min(minY,p.y); maxY=Math.max(maxY,p.y);
     }
-    const w=maxX-minX, h=maxY-minY;
-    if(Math.max(w,h) < 40) return false;
-
-    // cambios de dirección vertical (sube/baja)
+    if(Math.max(maxX-minX, maxY-minY) < 40) return false;
     let turns=0;
     for(let i=2;i<path.length;i++){
       const a = path[i-2].y - path[i-1].y;
       const b = path[i-1].y - path[i].y;
       if(a*b < 0) turns++;
     }
-    return turns >= 3; // MUY permisivo
+    return turns >= 3;
   }
-
   function isW(path){
     if(path.length < 6) return false;
-    // alternancias verticales
     let changes=0;
     for(let i=2;i<path.length;i++){
       const a = path[i-2].y - path[i-1].y;
       const b = path[i-1].y - path[i].y;
       if(a*b < 0) changes++;
     }
-    return changes >= 2; // MUY permisivo
+    return changes >= 2;
   }
-
   function trackAndLockIfNeeded(f){
     if(!f || f.eightLocked || f.wLocked) return;
-
     f.path.push({x:f.x,y:f.y});
     if(f.path.length > 90) f.path.shift();
-
-    if(isEight(f.path)){
-      f.eightLocked = true;
-      f.wLocked = false;
-      return;
-    }
-    if(isW(f.path)){
-      f.wLocked = true;
-      f.eightLocked = false;
-      return;
-    }
+    if(isEight(f.path)){ f.eightLocked=true; f.wLocked=false; return; }
+    if(isW(f.path)){ f.wLocked=true; f.eightLocked=false; return; }
   }
 
   function pickWinners(ids, k){
@@ -506,35 +408,22 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
   function endRound(){
     clearTimeout(roundTimer);
 
-    // ===== GROUPS =====
     if(mode === "groups"){
-      state = "groupsReveal";
-      stateEl.textContent = "grupos";
-
+      // revela grupos, pero sigue “vivo”
       assignGroupsColors(selectorValue);
-
+      state = "groupsLive";
+      stateEl.textContent = "grupos";
       // fondo negro siempre
       colorFill.classList.remove("on");
       setHintColorWhenFill(false);
-
       render();
-
-      clearTimeout(resultTimer);
-      resultTimer = setTimeout(() => {
-        // vuelve a negro y permite jugar (pero evitando “fantasmas”)
-        lockAndWaitAllUp();
-      }, SHOW_MS);
-
       return;
     }
 
-    // ===== FINGERS =====
-    stateEl.textContent = "fin";
-
+    // Fingers: decide ganador(es), pero sigue “vivo”
     const entries = [...fingers.entries()];
     const idsAll = entries.map(([id])=>id);
 
-    // prioridad: 8 gana, W pierde
     const eightIds = entries.filter(([_,f])=>f.eightLocked).map(([id])=>id);
     const bannedW = new Set(entries.filter(([_,f])=>f.wLocked).map(([id])=>id));
 
@@ -548,150 +437,230 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
       winners = allowed.length ? pickWinners(allowed, wanted) : pickWinners(idsAll, wanted);
     }
 
+    winnersSet = new Set(winners);
     winnerColors = winners.map(id => fingers.get(id)?.realColor).filter(Boolean);
 
-    // fondo teñido (si varios -> degradado)
     setFillFromWinnerColors(winnerColors);
     colorFill.classList.add("on");
     setHintColorWhenFill(true, winnerColors[0] || "#000");
 
-    // snapshot de posiciones (para que aunque levanten dedos, la animación se quede)
-    winnersFrozen = winners.map(id => {
-      const f = fingers.get(id);
-      return { x: f?.x ?? 0, y: f?.y ?? 0, color: f?.realColor || "#fff" };
-    });
-
-    state = "winnerFreeze";
+    state = "winnerLive";
+    stateEl.textContent = "fin";
     render();
+  }
 
-    clearTimeout(resultTimer);
-    resultTimer = setTimeout(() => {
-      lockAndWaitAllUp();
-    }, SHOW_MS);
+  function startHoldThenReset(){
+    // solo si ya no hay dedos
+    if(fingers.size !== 0) return;
+
+    state = "postHold";
+    stateEl.textContent = "esperando";
+
+    // durante hold, dejamos la pantalla tal cual (ganadores o grupos visibles quietos)
+    clearTimeout(holdTimer);
+    holdTimer = setTimeout(() => {
+      // limpieza completa para nueva partida
+      for(const [k] of dots) removeDot(k);
+      fingers.clear();
+      goWaiting();
+    }, HOLD_MS);
+  }
+
+  function render(){
+    // waiting/running: todos con su color o blanco (groups)
+    if(state === "waiting" || state === "running"){
+      for(const [id,f] of fingers){
+        const el = ensureDot(id);
+        el.style.left = f.x+"px";
+        el.style.top  = f.y+"px";
+
+        if(mode === "groups" && state === "running"){
+          el.style.setProperty("--fill", "#e8e8e8");
+          el.style.setProperty("--c", "#bdbdbd");
+        } else {
+          const c = f.realColor || COLORS[0];
+          el.style.setProperty("--fill", c);
+          el.style.setProperty("--c", c);
+        }
+
+        el.classList.toggle("running", state==="running");
+        el.classList.remove("win","lose");
+      }
+      for(const [k] of dots){
+        if(!fingers.has(k)) removeDot(k);
+      }
+      return;
+    }
+
+    // winnerLive: solo ganadores (pero se mueven y animan si el dedo se mueve)
+    if(state === "winnerLive"){
+      // quita los no-ganadores
+      for(const [id] of dots){
+        if(!winnersSet.has(id)) removeDot(id);
+      }
+      for(const [id,f] of fingers){
+        if(!winnersSet.has(id)) continue;
+        const el = ensureDot(id);
+        el.style.left = f.x+"px";
+        el.style.top  = f.y+"px";
+        const c = f.realColor || winnerColors[0] || "#fff";
+        el.style.setProperty("--fill", c);
+        el.style.setProperty("--c", c);
+        el.classList.add("win","running"); // ✅ sigue animación
+        el.classList.remove("lose");
+      }
+      return;
+    }
+
+    // groupsLive: todos con color de grupo, y siguen animando y moviéndose
+    if(state === "groupsLive"){
+      for(const [id,f] of fingers){
+        const el = ensureDot(id);
+        el.style.left = f.x+"px";
+        el.style.top  = f.y+"px";
+        const gc = f.groupColor || "#e8e8e8";
+        el.style.setProperty("--fill", gc);
+        el.style.setProperty("--c", mixWithWhite(gc, 0.25));
+        el.classList.add("running");      // ✅ sigue animación
+        el.classList.remove("win","lose");
+      }
+      for(const [k] of dots){
+        if(!fingers.has(k)) removeDot(k);
+      }
+      return;
+    }
+
+    // postHold: no hacemos nada (se queda quieto lo que haya)
   }
 
   /* =========================
-     TOUCH: robusto (sin congelar)
+     TOUCH
      ========================= */
-
-  function updateLastCount(){
-    // Si estamos bloqueados esperando soltar: al llegar a 0 desbloqueamos
-    if(lockUntilAllUp && fingers.size === 0){
-      lockUntilAllUp = false;
-      goWaiting();
-    }
+  function canAddNewFingers(){
+    // solo en waiting/running
+    return (state === "waiting" || state === "running");
   }
 
   zone.addEventListener("touchstart", e => {
     e.preventDefault();
 
-    // Si estamos mostrando resultado o bloqueados, NO aceptamos nuevos dedos
-    if(state==="winnerFreeze" || state==="groupsReveal" || lockUntilAllUp) return;
+    // En winnerLive/groupsLive/postHold: NO se pueden añadir dedos nuevos
+    if(!canAddNewFingers()) return;
 
-    let addedOrRemoved = false;
-
+    let changed = false;
     for(const t of e.changedTouches){
       const id = t.identifier;
       if(!fingers.has(id)){
         if(fingers.size >= MAX) continue;
-        fingers.set(id, {
+        fingers.set(id,{
           x:t.clientX, y:t.clientY,
           realColor:null,
-          taps:0,
-          path:[],
-          eightLocked:false,
-          wLocked:false,
+          taps:0, path:[],
+          eightLocked:false, wLocked:false,
           groupColor:null
         });
-        addedOrRemoved = true;
+        changed = true;
       }
       const f = fingers.get(id);
       if(f){ f.x=t.clientX; f.y=t.clientY; }
     }
 
-    // Asigna colores reales (Fingers) aunque estés en Groups (no se mostrarán en la cuenta)
     ensureUniqueRealColors();
 
-    // arranca cuando entra el 2º dedo
     if(state==="waiting" && fingers.size>=2){
       startRound();
       return;
     }
 
-    // si ya estaba corriendo, reinicia cuenta al cambiar dedos
-    if(state==="running" && addedOrRemoved){
+    if(state==="running" && changed){
       restartRoundTimer();
     }
-
     render();
   }, {passive:false});
 
   zone.addEventListener("touchmove", e => {
     e.preventDefault();
-    if(state!=="running" || lockUntilAllUp) return;
 
+    // En postHold ignoramos
+    if(state==="postHold") return;
+
+    // En running / winnerLive / groupsLive actualizamos posiciones y animación
     for(const t of e.changedTouches){
       const f = fingers.get(t.identifier);
       if(!f) continue;
       f.x=t.clientX; f.y=t.clientY;
 
-      // trucos solo en Fingers
-      if(mode==="fingers"){
+      if(state==="running" && mode==="fingers"){
         trackAndLockIfNeeded(f);
       }
 
-      // Render rápido
+      // render rápido del dedo que se mueve
       const el = ensureDot(t.identifier);
       el.style.left = f.x+"px";
       el.style.top  = f.y+"px";
 
-      if(mode==="groups"){
-        // durante cuenta: blanco
-        el.style.setProperty("--fill", "#e8e8e8");
-        el.style.setProperty("--c", "#bdbdbd");
-      } else {
-        const c = f.realColor || COLORS[0];
-        el.style.setProperty("--fill", c);
-        el.style.setProperty("--c", c);
+      if(state==="running"){
+        if(mode==="groups"){
+          el.style.setProperty("--fill", "#e8e8e8");
+          el.style.setProperty("--c", "#bdbdbd");
+          el.classList.add("running");
+          el.classList.remove("win");
+        } else {
+          const c = f.realColor || COLORS[0];
+          el.style.setProperty("--fill", c);
+          el.style.setProperty("--c", c);
+          el.classList.add("running");
+          el.classList.remove("win");
+        }
+      } else if(state==="winnerLive"){
+        // solo animar si es ganador
+        if(winnersSet.has(t.identifier)){
+          const c = f.realColor || winnerColors[0] || "#fff";
+          el.style.setProperty("--fill", c);
+          el.style.setProperty("--c", c);
+          el.classList.add("win","running");
+        }
+      } else if(state==="groupsLive"){
+        const gc = f.groupColor || "#e8e8e8";
+        el.style.setProperty("--fill", gc);
+        el.style.setProperty("--c", mixWithWhite(gc, 0.25));
+        el.classList.add("running");
+        el.classList.remove("win");
       }
-      el.classList.add("running");
-      el.classList.remove("win","lose");
     }
   }, {passive:false});
 
-  // MUY IMPORTANTE: touchend/cancel SIEMPRE se procesan,
-  // incluso durante resultados, para que no se “queden” dedos fantasmas.
   function handleEndLike(e){
     e.preventDefault();
 
-    let changed = false;
+    let changed=false;
     for(const t of e.changedTouches){
       const id = t.identifier;
       if(fingers.has(id)){
         fingers.delete(id);
-        changed = true;
-        // En estados normales quitamos su dot
-        if(state!=="winnerFreeze" && state!=="groupsReveal"){
-          removeDot(id);
-        }
+        removeDot(id);
+        changed=true;
       }
     }
 
-    // si estaba corriendo y cambian dedos => reinicia la cuenta
     if(state==="running" && changed){
+      // reinicia cuenta si entra/sale dedo
       restartRoundTimer();
     }
 
-    updateLastCount();
-
-    // Solo re-render si no estamos en winnerFreeze (que dibuja con snapshot)
-    if(state==="winnerFreeze"){
-      // nada
-    } else if(state==="groupsReveal"){
-      // nada (se queda el reveal)
-    } else {
-      render();
+    // Si el resultado ya está decidido (winnerLive o groupsLive) y ya no quedan dedos:
+    if((state==="winnerLive" || state==="groupsLive") && fingers.size===0){
+      // Deja la última imagen “quieta” (ya no hay dedos que mover)
+      state = "postHold";
+      // stop animación: quitamos running a todo lo que quede
+      for(const [,el] of dots){
+        el.classList.remove("running");
+      }
+      startHoldThenReset();
+      return;
     }
+
+    render();
   }
 
   zone.addEventListener("touchend", handleEndLike, {passive:false});
@@ -731,7 +700,6 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
   });
 
   // init
-  modal.style.setProperty("--accent", "var(--green)");
   stateEl.textContent="esperando";
   setHintColorWhenFill(false);
   updateUI();
