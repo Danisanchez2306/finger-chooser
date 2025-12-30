@@ -203,7 +203,19 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
   const ROUND_MS = 4000;
   const HOLD_MS = 5000;
 
-  const COLORS = ["#ff3b30","#ff9500","#ffcc00","#34c759","#00c7be","#007aff","#5856d6","#af52de","#ff2d55","#ff6f00"];
+  // ✅ SOLO CAMBIO: 10 colores fosforitos, bien contrastados
+  const COLORS = [
+    "#00FF00", // verde neón
+    "#00FFFF", // cian neón
+    "#1E90FF", // azul eléctrico
+    "#FFD700", // amarillo neón
+    "#FF0000", // rojo puro
+    "#FF8C00", // naranja neón
+    "#ADFF2F", // lima
+    "#FF1493", // rosa neón
+    "#7CFF00", // verde ácido
+    "#8A2BE2"  // violeta eléctrico (separado del rosa)
+  ];
 
   let selectorValue = 1;
   let mode = "fingers";
@@ -238,7 +250,7 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
     stateEl.style.color = color;
   }
 
-  // ✅ NUEVO: si hay degradado (2+ ganadores), texto transparente (invisible)
+  // Si hay degradado (2+ ganadores), texto transparente (invisible)
   function setSecretTextForWinnerBackground(colors){
     if(!colors || colors.length === 0){
       setHiddenTextColor("#000");
@@ -309,7 +321,7 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
     winnerColors = [];
     holdSnapshot = [];
     colorFill.classList.remove("on");
-    setHiddenTextColor("#000"); // ✅ vuelve a negro
+    setHiddenTextColor("#000");
     state = "waiting";
     stateEl.textContent = "esperando";
     fingers.clear();
@@ -411,7 +423,7 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
       state = "groupsLive";
       stateEl.textContent = "grupos";
       colorFill.classList.remove("on");
-      setHiddenTextColor("#000"); // siempre negro en groups
+      setHiddenTextColor("#000");
       render();
       return;
     }
@@ -437,7 +449,7 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
 
     setFillFromWinnerColors(winnerColors);
     colorFill.classList.add("on");
-    setSecretTextForWinnerBackground(winnerColors); // ✅ aquí el cambio
+    setSecretTextForWinnerBackground(winnerColors);
 
     state = "winnerLive";
     stateEl.textContent = "fin";
@@ -474,7 +486,6 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
     state = "postHold";
     stateEl.textContent = "esperando";
 
-    // stop animación
     for(const [,el] of dots) el.classList.remove("running");
     render();
 
