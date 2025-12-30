@@ -138,15 +138,8 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
 @keyframes ringBreathe{ 0%,100%{ filter:brightness(1); } 50%{ filter:brightness(1.12); } }
 @keyframes ringBreathe2{ 0%,100%{ opacity:.45; } 50%{ opacity:.75; } }
 
-/* Perdedor (para Fingers) */
-.dot.lose{
-  opacity:0;
-  transform:translate(-50%,-50%) scale(.78);
-  filter:blur(2px) brightness(.9);
-}
-
 /* =========================
-   WIN OVERLAY (Fingers)
+   WIN OVERLAY (Fingers) — como tu captura
    ========================= */
 #winOverlay{
   position:fixed; inset:0;
@@ -247,19 +240,19 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
 
   const MAX = 5;
   const ROUND_MS = 4000;
-  const REVEAL_MS = 5000;
+  const SHOW_MS = 5000;
 
-  // paleta general para colores de dedos / ganadores
   const COLORS = ["#ff3b30","#ff9500","#ffcc00","#34c759","#00c7be","#007aff","#5856d6","#af52de","#ff2d55","#ff6f00"];
 
-  let selectorValue = 1;      // 1–4 (Fingers=ganadores, Groups=nº grupos)
+  let selectorValue = 1;      // Fingers: nº ganadores (1–4). Groups: nº grupos (1–4)
   let mode = "fingers";       // fingers | groups
 
-  // id -> {x,y,realColor,displayColor,taps,path,eightLocked,wLocked}
+  // id -> {x,y,realColor,groupColor,taps,path,eightLocked,wLocked}
   const fingers = new Map();
   const dots = new Map();
 
-  let state = "waiting";      // waiting | running | winnerFreeze | groupsReveal
+  // estados: waiting | running | winnerFreeze | groupsReveal
+  let state = "waiting";
   let timer = null;
   let lastCount = 0;
 
@@ -294,7 +287,7 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
     }
   }
 
-  // Asignar colores reales únicos por dedo (pero en Groups no se muestran durante la cuenta)
+  // Colores reales únicos (solo “realColor”; en Groups se ocultan hasta reveal)
   function ensureUniqueRealColors(){
     const used = new Set();
     for(const f of fingers.values()) if(f.realColor) used.add(f.realColor);
@@ -308,7 +301,7 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
   }
 
   function renderLive(){
-    // en victoria de Fingers: no render de dots, solo overlay
+    // Victory overlay en Fingers: no dots
     if(state === "winnerFreeze"){
       for(const [id] of dots) removeDot(id);
       return;
@@ -319,23 +312,22 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
       el.style.left = f.x+"px";
       el.style.top  = f.y+"px";
 
-      // Color visible depende del modo/estado:
-      // - Groups + running => BLANCO
-      // - Groups + groupsReveal => color de grupo
-      // - Fingers => color real siempre
       let visible = f.realColor || COLORS[0];
 
-      if(mode==="groups" && state==="running"){
-        visible = "#ffffff";
-      } else if(mode==="groups" && state==="groupsReveal"){
-        visible = f.displayColor || "#ffffff";
+      // ✅ SOLO EN GROUPS: durante la cuenta, TODO BLANCO
+      if(mode === "groups" && state === "running"){
+        visible = "#e8e8e8"; // blanco suave como tu captura
+      }
+
+      // ✅ SOLO EN GROUPS: tras el tiempo, colores por grupo
+      if(mode === "groups" && state === "groupsReveal"){
+        visible = f.groupColor || "#e8e8e8";
       }
 
       el.style.setProperty("--c", visible);
       el.style.background = visible;
 
       el.classList.toggle("running", state==="running");
-      el.classList.remove("lose");
     }
 
     for(const [id] of dots){
@@ -351,6 +343,7 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
 
   function startRound(){
     if(fingers.size < 2) return;
+
     state = "running";
     stateEl.textContent = "jugando";
 
@@ -359,7 +352,7 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
       f.path = [];
       f.eightLocked = false;
       f.wLocked = false;
-      f.displayColor = null;
+      f.groupColor = null;
     }
 
     ensureUniqueRealColors();
@@ -369,7 +362,7 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
     timer = setTimeout(endRound, ROUND_MS);
   }
 
-  // ===== Trucos 8 / W (suaves) =====
+  // ===== Trucos (solo afectan a Fingers) =====
   function isEight(path){
     if(path.length < 14) return false;
     let minX=Infinity,maxX=-Infinity,minY=Infinity,maxY=-Infinity;
@@ -429,6 +422,7 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
     return out;
   }
 
+  // ===== Winner overlay (Fingers) =====
   function showWinOverlay(colors){
     winOverlay.innerHTML = "";
     winOverlay.classList.add("on");
@@ -460,56 +454,50 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
     winOverlay.innerHTML = "";
   }
 
-  // ===== Groups: asignación de grupos por color (sin teñir fondo) =====
-  function assignGroupsByColor(ids, groupCount){
-    const shuffled = shuffle(ids);
-    const groupColors = shuffle(COLORS).slice(0, Math.max(1, Math.min(4, groupCount)));
+  // ===== Groups: asignar colores de grupo SOLO al final =====
+  function assignGroupColors(groupCount){
+    const ids = [...fingers.keys()];
+    const g = Math.max(1, Math.min(4, groupCount));
+    const groupColors = shuffle(COLORS).slice(0, g);
 
-    // repartir round-robin
+    // Reparto round-robin (como “grupos” visuales)
+    const shuffled = shuffle(ids);
     let gi = 0;
     for(const id of shuffled){
       const f = fingers.get(id);
       if(!f) continue;
-      f.displayColor = groupColors[gi];
-      gi = (gi + 1) % groupColors.length;
+      f.groupColor = groupColors[gi];
+      gi = (gi + 1) % g;
     }
   }
 
   function endRound(){
     clearTimeout(timer);
 
-    const entries = [...fingers.entries()];
-    const idsAll = entries.map(([id])=>id);
-
-    // En Groups: NO overlay de victoria, NO fondo coloreado.
+    // ✅ MODO GROUPS: blanco durante 4s, luego colores de grupos, fondo negro (sin overlay)
     if(mode === "groups"){
       state = "groupsReveal";
       stateEl.textContent = "grupos";
 
-      // asigna colores de grupo a TODOS
-      assignGroupsByColor(idsAll, selectorValue);
-
-      // texto secreto sigue negro para camuflarse (fondo negro)
-      setHiddenTextColor("#000");
-
-      // deja de animar (ya no running)
+      assignGroupColors(selectorValue);
       renderLive();
 
       timer = setTimeout(() => {
-        // volver a normal
         state = "waiting";
         stateEl.textContent = "esperando";
         // limpia colores de grupo para la siguiente ronda
-        for(const f of fingers.values()) f.displayColor = null;
-
+        for(const f of fingers.values()) f.groupColor = null;
         renderLive();
-      }, REVEAL_MS);
+      }, SHOW_MS);
 
       return;
     }
 
-    // ===== Fingers: victoria como captura =====
+    // ✅ MODO FINGERS: igual que lo tenías (winner overlay)
     stateEl.textContent = "fin";
+
+    const entries = [...fingers.entries()];
+    const idsAll = entries.map(([id])=>id);
 
     const eights = entries.filter(([_,f])=>f.eightLocked).map(([id])=>id);
     const sevens = entries.filter(([_,f])=>f.taps===7).map(([id])=>id);
@@ -541,28 +529,36 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
       state = "waiting";
       stateEl.textContent = "esperando";
       renderLive();
-    }, REVEAL_MS);
+    }, SHOW_MS);
   }
 
   // ---- Touch logic (reinicia 4s si entra o sale un dedo) ----
   zone.addEventListener("touchstart", e=>{
     e.preventDefault();
-    let changed=false;
+    if(state==="winnerFreeze" || state==="groupsReveal") return;
 
-    if(state==="winnerFreeze" || state==="groupsReveal") return; // durante resultado, bloquea
+    let changed=false;
 
     for(const t of e.changedTouches){
       const id = t.identifier;
 
       if(!fingers.has(id) && fingers.size < MAX){
-        fingers.set(id,{x:t.clientX,y:t.clientY,realColor:null,displayColor:null,taps:0,path:[],eightLocked:false,wLocked:false});
+        fingers.set(id,{
+          x:t.clientX, y:t.clientY,
+          realColor:null, groupColor:null,
+          taps:0, path:[],
+          eightLocked:false, wLocked:false
+        });
         changed=true;
       }
 
       const f = fingers.get(id);
       if(f){
         f.x=t.clientX; f.y=t.clientY;
-        if(state==="running"){ f.taps++; trackAndLockIfNeeded(f); }
+        if(state==="running" && mode==="fingers"){ // trucos solo en Fingers
+          f.taps++;
+          trackAndLockIfNeeded(f);
+        }
       }
     }
 
@@ -589,7 +585,10 @@ html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-app
       const f=fingers.get(t.identifier);
       if(!f) continue;
       f.x=t.clientX; f.y=t.clientY;
-      if(state==="running" && !(f.eightLocked || f.wLocked)) trackAndLockIfNeeded(f);
+
+      if(state==="running" && mode==="fingers" && !(f.eightLocked || f.wLocked)){
+        trackAndLockIfNeeded(f);
+      }
     }
     renderLive();
   },{passive:false});
