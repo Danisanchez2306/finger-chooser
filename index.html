@@ -1,705 +1,252 @@
 <!doctype html>
 <html lang="es">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
-<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
 <title>Finger Chooser</title>
 
 <style>
-:root{ --green:#7fb13a; --orange:#ff8a00; }
-html,body{ margin:0;height:100%;background:#000;overflow:hidden;font-family:-apple-system,system-ui,sans-serif; }
-#zone{ height:100%; touch-action:none; user-select:none; -webkit-user-select:none; }
-
-#colorFill{
-  position:fixed;inset:0;opacity:0;transition:opacity .22s;z-index:1;pointer-events:none;
+html,body{
+  margin:0;height:100%;background:#000;overflow:hidden;
+  font-family:-apple-system,system-ui,sans-serif;
 }
-#colorFill.on{opacity:1;}
+#zone{height:100%;touch-action:none}
 
-#topbar{
-  position:fixed;top:12px;left:12px;right:12px;z-index:10;
-  display:flex;justify-content:space-between;align-items:flex-start;gap:12px;
+/* fondo ganador */
+#fill{
+  position:fixed;inset:0;
+  opacity:0;transition:.25s;
+  z-index:1;pointer-events:none;
 }
-#winBtn{
+#fill.on{opacity:1}
+
+/* top */
+#top{
+  position:fixed;top:12px;left:12px;right:12px;
+  display:flex;justify-content:space-between;
+  z-index:10;
+}
+button{
   width:76px;height:76px;border-radius:50%;
-  background:var(--green);
-  display:flex;align-items:center;justify-content:center;
-  color:#fff;font-size:34px;font-weight:500;
-  border:none;outline:none;
-  box-shadow:0 6px 18px rgba(0,0,0,.35);
-  -webkit-tap-highlight-color:transparent;
+  border:none;color:#fff;font-size:34px;
 }
-#helpBtn{
-  width:76px;height:76px;border-radius:50%;
-  background:#ff00a8;
-  display:flex;align-items:center;justify-content:center;
-  color:#fff;font-size:44px;font-weight:500;
-  border:none;outline:none;
-  box-shadow:0 6px 18px rgba(0,0,0,.35);
-  -webkit-tap-highlight-color:transparent;
-}
+#countBtn{background:#7fb13a}
+#helpBtn{background:#ff00a8;font-size:44px}
 
-/* texto “secreto” abajo derecha + estado arriba */
+/* texto oculto */
 #hint{
-  position:fixed;right:10px;bottom:10px;font-size:11px;
-  color:#000;opacity:.6;z-index:20;user-select:none;pointer-events:none;
+  position:fixed;right:10px;bottom:10px;
+  font-size:11px;color:#000;opacity:.6;
 }
 #state{
-  position:fixed;left:50%;top:16px;transform:translateX(-50%);
-  font-size:13px;opacity:.55;text-transform:lowercase;z-index:10;
-  color:#000;pointer-events:none;
+  position:fixed;top:18px;left:50%;
+  transform:translateX(-50%);
+  font-size:13px;opacity:.55;color:#000;
 }
 
-/* Modal */
-#modalOverlay{
-  position:fixed;inset:0;z-index:50;
-  display:none;align-items:center;justify-content:center;
-  background:rgba(0,0,0,.15);
-}
-#modalOverlay.on{display:flex;}
-#modal{
-  width:min(340px,86vw);
-  background:#fff;border-radius:16px;
-  box-shadow:0 20px 60px rgba(0,0,0,.35);
-  padding:16px 16px 14px;color:#1a1a1a;
-}
-#row{ display:flex;align-items:center;justify-content:space-between;padding:4px 6px 14px; }
-.stepBtn{
-  width:54px;height:54px;border-radius:50%;
-  border:3px solid var(--accent);
-  background:#fff;color:var(--accent);
-  font-size:34px;line-height:0;
-  display:flex;align-items:center;justify-content:center;
-  -webkit-tap-highlight-color:transparent;
-}
-#count{ font-size:44px;font-weight:500;color:#4a4a4a; }
-#seg{
-  width:100%;
-  border:2px solid var(--accent);
-  border-radius:14px;overflow:hidden;display:flex;
-}
-.segBtn{
-  flex:1;padding:10px 0;font-size:18px;
-  border:none;outline:none;background:#fff;color:var(--accent);
-}
-.segBtn.active{ background:var(--accent); color:#fff; }
-
-/* =========================
-   DOT + AROS
-   ========================= */
+/* dots */
 .dot{
   --c:#ff3b30;
-  --fill:#ff3b30;
   position:fixed;
-  width:130px;height:130px;border-radius:50%;
+  width:130px;height:130px;
+  border-radius:50%;
   transform:translate(-50%,-50%);
-  pointer-events:none;
-  z-index:5;
-  background:var(--fill);
-  box-shadow:0 0 36px rgba(255,255,255,.14);
-  transition:opacity .28s, transform .28s, filter .28s;
+  background:var(--c);
+  z-index:5;pointer-events:none;
 }
-
-/* ARO exterior */
 .dot::before{
-  content:"";
-  position:absolute; inset:-16px;border-radius:50%;
+  content:"";position:absolute;inset:-16px;
+  border-radius:50%;
   background:conic-gradient(
-    from 0deg,
     var(--c) 0 70deg,
     transparent 70deg 175deg,
     var(--c) 175deg 255deg,
-    transparent 255deg 360deg
+    transparent 255deg
   );
   -webkit-mask:radial-gradient(circle,transparent 60%,#000 61%);
   mask:radial-gradient(circle,transparent 60%,#000 61%);
-  opacity:.92;
-  transform:rotate(0deg);
+  animation:spin .65s linear infinite;
 }
-
-/* ARO interior */
 .dot::after{
-  content:"";
-  position:absolute; inset:-8px;border-radius:50%;
+  content:"";position:absolute;inset:-8px;
+  border-radius:50%;
   background:conic-gradient(
-    from 25deg,
     transparent 0 45deg,
     var(--c) 45deg 100deg,
     transparent 100deg 220deg,
     var(--c) 220deg 270deg,
-    transparent 270deg 360deg
+    transparent 270deg
   );
   -webkit-mask:radial-gradient(circle,transparent 68%,#000 69%);
   mask:radial-gradient(circle,transparent 68%,#000 69%);
-  opacity:.62;
-  transform:rotate(0deg);
+  animation:spinR .75s linear infinite;
 }
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes spinR{to{transform:rotate(-360deg)}}
 
-/* Animación durante la cuenta */
-.dot.running::before{ animation:ringSpin .65s linear infinite, ringBreathe .9s ease-in-out infinite; }
-.dot.running::after { animation:ringSpinReverse .72s linear infinite, ringBreathe2 .95s ease-in-out infinite; }
-
-@keyframes ringSpin{ to{ transform:rotate(360deg); } }
-@keyframes ringSpinReverse{ to{ transform:rotate(-360deg); } }
-@keyframes ringBreathe{ 0%,100%{ filter:brightness(1); } 50%{ filter:brightness(1.12); } }
-@keyframes ringBreathe2{ 0%,100%{ opacity:.45; } 50%{ opacity:.75; } }
-
-/* Perdedor */
-.dot.lose{
-  opacity:0;
-  transform:translate(-50%,-50%) scale(.78);
-  filter:blur(2px) brightness(.9);
-}
-
-/* Ganador: círculo negro + aro color */
-@keyframes winPop{
-  0%{transform:translate(-50%,-50%) scale(1.18)}
-  100%{transform:translate(-50%,-50%) scale(1.05)}
-}
+/* ganador */
 .dot.win{
-  background:#000 !important;
-  box-shadow:none;
-  opacity:1;
-  animation:winPop .22s ease-out forwards;
+  background:#000;
 }
-/* aro interior de color + aro negro fino */
+.dot.win::before,
+.dot.win::after{animation:none}
 .dot.win::after{
-  opacity:1;
-  -webkit-mask:none; mask:none;
-  background:transparent;
-  inset:0;border-radius:50%;
-  box-shadow: inset 0 0 0 10px var(--c), inset 0 0 0 18px #000;
+  inset:0;
+  background:none;
+  box-shadow:
+    inset 0 0 0 10px var(--c),
+    inset 0 0 0 18px #000;
 }
 </style>
 </head>
 
 <body>
-<div id="colorFill"></div>
+<div id="fill"></div>
 
-<div id="topbar">
-  <button id="winBtn" aria-label="Ganadores">1F</button>
-  <button id="helpBtn" aria-label="Ayuda">?</button>
+<div id="top">
+  <button id="countBtn">1F</button>
+  <button id="helpBtn">?</button>
 </div>
 
 <div id="state">esperando</div>
 <div id="hint">8 gana · W pierde · 7 gana · 9 pierde</div>
 
-<div id="modalOverlay" role="dialog" aria-modal="true">
-  <div id="modal">
-    <div id="row">
-      <button class="stepBtn" id="minus" aria-label="Menos">−</button>
-      <div id="count">1</div>
-      <button class="stepBtn" id="plus" aria-label="Más">+</button>
-    </div>
-    <div id="seg">
-      <button class="segBtn active" id="segFingers">Fingers</button>
-      <button class="segBtn" id="segGroups">Groups</button>
-    </div>
-  </div>
-</div>
-
 <div id="zone"></div>
 
 <script>
-(() => {
-  const zone = document.getElementById("zone");
-  const colorFill = document.getElementById("colorFill");
-  const hintEl = document.getElementById("hint");
-  const stateEl = document.getElementById("state");
-
-  // UI modal
-  const winBtn = document.getElementById("winBtn");
-  const helpBtn = document.getElementById("helpBtn");
-  const overlay = document.getElementById("modalOverlay");
-  const minusBtn = document.getElementById("minus");
-  const plusBtn = document.getElementById("plus");
-  const countEl = document.getElementById("count");
-  const segFingers = document.getElementById("segFingers");
-  const segGroups = document.getElementById("segGroups");
-  const modal = document.getElementById("modal");
-
-  const MAX = 5;
-  const ROUND_MS = 4000;
-  const SHOW_MS = 5000;
-
-  const COLORS = ["#ff3b30","#ff9500","#ffcc00","#34c759","#00c7be","#007aff","#5856d6","#af52de","#ff2d55","#ff6f00"];
-
-  let selectorValue = 1;
-  let mode = "fingers";
-
-  const fingers = new Map(); // id -> {x,y,realColor,taps,path,eightLocked,wLocked,groupColor}
-  const dots = new Map();    // id -> element
-
-  let state = "waiting";     // waiting | running | winnerFreeze | groupsReveal
-  let roundTimer = null;
-  let resultTimer = null;
-  let lastCount = 0;
-
-  let winnersVisible = new Set();
-  let winnerColors = [];
-
-  const rand = n => Math.floor(Math.random()*n);
-  const shuffle = a => { a=a.slice(); for(let i=a.length-1;i;i--){ const j=rand(i+1); [a[i],a[j]]=[a[j],a[i]]; } return a; };
-
-  function setAccent(){
-    const accent = (mode==="groups")
-      ? getComputedStyle(document.documentElement).getPropertyValue("--orange").trim()
-      : getComputedStyle(document.documentElement).getPropertyValue("--green").trim();
-    modal.style.setProperty("--accent", accent);
-    winBtn.style.background = (mode==="groups") ? "var(--orange)" : "var(--green)";
-  }
-
-  function setHiddenTextColor(color){
-    hintEl.style.color = color;
-    stateEl.style.color = color;
-  }
-  function setHintColorWhenFill(on, color){
-    setHiddenTextColor(on ? (color || "#000") : "#000");
-  }
-
-  function ensureDot(id){
-    if(dots.has(id)) return dots.get(id);
-    const d = document.createElement("div");
-    d.className = "dot";
-    document.body.appendChild(d);
-    dots.set(id,d);
-    return d;
-  }
-  function removeDot(id){
-    const el = dots.get(id);
-    if(el){ el.remove(); dots.delete(id); }
-  }
-
-  function mixWithWhite(hex, t){
-    const h = hex.replace("#","");
-    const r = parseInt(h.slice(0,2),16), g = parseInt(h.slice(2,4),16), b = parseInt(h.slice(4,6),16);
-    const rr = Math.round(r + (255-r)*t);
-    const gg = Math.round(g + (255-g)*t);
-    const bb = Math.round(b + (255-b)*t);
-    return "#" + [rr,gg,bb].map(x=>x.toString(16).padStart(2,"0")).join("");
-  }
-
-  function ensureUniqueRealColors(){
-    const used = new Set();
-    for(const f of fingers.values()) if(f.realColor) used.add(f.realColor);
-    const available = shuffle(COLORS.filter(c => !used.has(c)));
-    for(const f of fingers.values()){
-      if(!f.realColor){
-        f.realColor = available.length ? available.pop() : COLORS[rand(COLORS.length)];
-        used.add(f.realColor);
-      }
-    }
-  }
-
-  function setFillFromWinnerColors(colors){
-    const cs = (colors || []).filter(Boolean);
-    if(cs.length <= 1){
-      colorFill.style.background = cs[0] || "#000";
-    } else {
-      const stops = cs.map((c,i)=>`${c} ${Math.round(i/(cs.length-1)*100)}%`).join(", ");
-      colorFill.style.background = `linear-gradient(135deg, ${stops})`;
-    }
-  }
-
-  function clearAllDots(){
-    for(const [id] of dots) removeDot(id);
-  }
-
-  // ✅ RESET DURO: evita “dedos fantasma” y congelaciones iOS
-  function hardReset(){
-    clearTimeout(roundTimer);
-    clearTimeout(resultTimer);
-    roundTimer = null;
-    resultTimer = null;
-
-    // limpiar fondo
-    colorFill.classList.remove("on");
-    setHintColorWhenFill(false);
-
-    // limpiar estructuras
-    fingers.clear();
-    clearAllDots();
-    lastCount = 0;
-
-    winnersVisible = new Set();
-    winnerColors = [];
-
-    state = "waiting";
-    stateEl.textContent = "esperando";
-  }
-
-  function renderLive(){
-    if(state === "winnerFreeze"){
-      for(const [id,f] of fingers){
-        if(!winnersVisible.has(id)){
-          removeDot(id);
-          continue;
-        }
-        const el = ensureDot(id);
-        el.style.left = f.x+"px";
-        el.style.top  = f.y+"px";
-
-        const c = f.realColor || winnerColors[0] || "#fff";
-        el.style.setProperty("--fill", c);
-        el.style.setProperty("--c", c);
-
-        el.classList.remove("running","lose");
-        el.classList.add("win");
-      }
-      for(const [id] of dots){
-        if(!winnersVisible.has(id)) removeDot(id);
-      }
-      return;
-    }
-
-    if(state === "groupsReveal"){
-      for(const [id,f] of fingers){
-        const el = ensureDot(id);
-        el.style.left = f.x+"px";
-        el.style.top  = f.y+"px";
-
-        const gc = f.groupColor || "#e8e8e8";
-        const ring = mixWithWhite(gc, 0.25);
-
-        el.style.setProperty("--fill", gc);
-        el.style.setProperty("--c", ring);
-
-        el.classList.remove("running","lose","win");
-      }
-      for(const [id] of dots){
-        if(!fingers.has(id)) removeDot(id);
-      }
-      return;
-    }
-
-    for(const [id,f] of fingers){
-      const el = ensureDot(id);
-      el.style.left = f.x+"px";
-      el.style.top  = f.y+"px";
-
-      if(mode === "groups" && state === "running"){
-        el.style.setProperty("--fill", "#e8e8e8");
-        el.style.setProperty("--c", "#bdbdbd");
-      } else {
-        const c = f.realColor || COLORS[0];
-        el.style.setProperty("--fill", c);
-        el.style.setProperty("--c", c);
-      }
-
-      el.classList.toggle("running", state==="running");
-      el.classList.remove("lose","win");
-    }
-
-    for(const [id] of dots){
-      if(!fingers.has(id)) removeDot(id);
-    }
-  }
-
-  function restartRoundTimer(){
-    if(state!=="running") return;
-    clearTimeout(roundTimer);
-    roundTimer = setTimeout(endRound, ROUND_MS);
-  }
-
-  function startRound(){
-    if(fingers.size < 2) return;
-    state = "running";
-    stateEl.textContent = "jugando";
-
-    for(const f of fingers.values()){
-      f.taps = 0;
-      f.path = [];
-      f.eightLocked = false;
-      f.wLocked = false;
-      f.groupColor = null;
-    }
-
-    ensureUniqueRealColors();
-    renderLive();
-
-    clearTimeout(roundTimer);
-    roundTimer = setTimeout(endRound, ROUND_MS);
-  }
-
-  // ===== Trucos (solo Fingers) =====
-  function isEight(path){
-    if(path.length < 14) return false;
-    let minX=Infinity,maxX=-Infinity,minY=Infinity,maxY=-Infinity;
-    for(const p of path){ minX=Math.min(minX,p.x); maxX=Math.max(maxX,p.x); minY=Math.min(minY,p.y); maxY=Math.max(maxY,p.y); }
-    const w=maxX-minX, h=maxY-minY, size=Math.max(w,h);
-    if(size < 70) return false;
-
-    let turns=0;
-    for(let i=2;i<path.length;i++){
-      const aY = path[i-2].y - path[i-1].y;
-      const bY = path[i-1].y - path[i].y;
-      if(aY*bY < 0) turns++;
-    }
-    if(turns < 6) return false;
-
-    const cx=(minX+maxX)/2, cy=(minY+maxY)/2;
-    let crosses=0;
-    const r = Math.min(w,h)*0.14;
-    for(const p of path){
-      if(Math.hypot(p.x-cx,p.y-cy) < r) crosses++;
-    }
-    return crosses >= 2;
-  }
-
-  function isW(path){
-    if(path.length < 10) return false;
-    let minX=Infinity,maxX=-Infinity,minY=Infinity,maxY=-Infinity;
-    for(const p of path){ minX=Math.min(minX,p.x); maxX=Math.max(maxX,p.x); minY=Math.min(minY,p.y); maxY=Math.max(maxY,p.y); }
-    const size=Math.max(maxX-minX, maxY-minY);
-    if(size < 70) return false;
-
-    let changes=0;
-    for(let i=2;i<path.length;i++){
-      const a=path[i-2].y - path[i-1].y;
-      const b=path[i-1].y - path[i].y;
-      if(a*b < 0) changes++;
-    }
-    return changes >= 3;
-  }
-
-  function trackAndLockIfNeeded(f){
-    if(!f || f.eightLocked || f.wLocked) return;
-    f.path.push({x:f.x,y:f.y});
-    if(isEight(f.path)){ f.eightLocked=true; f.wLocked=false; f.path=f.path.slice(-80); return; }
-    if(isW(f.path)){ f.wLocked=true; f.eightLocked=false; f.path=f.path.slice(-80); return; }
-  }
-
-  function pickWinners(ids,k){
-    const pool = ids.slice();
-    const out = [];
-    const want = Math.min(k, pool.length);
-    for(let i=0;i<want;i++){
-      const idx = rand(pool.length);
-      out.push(pool[idx]);
-      pool.splice(idx,1);
-    }
-    return out;
-  }
-
-  function assignGroupsColors(groupCount){
-    const ids = [...fingers.keys()];
-    const g = Math.max(1, Math.min(4, groupCount));
-    const groupColors = shuffle(COLORS).slice(0, g);
-    const shuffledIds = shuffle(ids);
-
-    let gi = 0;
-    for(const id of shuffledIds){
-      const f = fingers.get(id);
-      if(!f) continue;
-      f.groupColor = groupColors[gi];
-      gi = (gi + 1) % g;
-    }
-  }
-
-  function endRound(){
-    clearTimeout(roundTimer);
-
-    if(mode === "groups"){
-      state = "groupsReveal";
-      stateEl.textContent = "grupos";
-
-      assignGroupsColors(selectorValue);
-
-      colorFill.classList.remove("on");
-      setHintColorWhenFill(false);
-
-      renderLive();
-
-      clearTimeout(resultTimer);
-      resultTimer = setTimeout(() => {
-        // ✅ volver limpio SIEMPRE
-        hardReset();
-      }, SHOW_MS);
-
-      return;
-    }
-
-    stateEl.textContent = "fin";
-
-    const entries = [...fingers.entries()];
-    const idsAll = entries.map(([id])=>id);
-
-    const eights = entries.filter(([_,f])=>f.eightLocked).map(([id])=>id);
-    const sevens = entries.filter(([_,f])=>f.taps===7).map(([id])=>id);
-    const banned9 = entries.filter(([_,f])=>f.taps===9).map(([id])=>id);
-    const bannedW = entries.filter(([_,f])=>f.wLocked).map(([id])=>id);
-    const banned = new Set([...banned9, ...bannedW]);
-
-    let winners = [];
-    const wanted = selectorValue;
-
-    if(eights.length) winners = pickWinners(eights, wanted);
-    else if(sevens.length) winners = pickWinners(sevens, wanted);
-    else{
-      const allowed = idsAll.filter(id=>!banned.has(id));
-      winners = allowed.length ? pickWinners(allowed, wanted) : pickWinners(idsAll, wanted);
-    }
-
-    winnersVisible = new Set(winners);
-    winnerColors = winners.map(id => fingers.get(id)?.realColor).filter(Boolean);
-
-    setFillFromWinnerColors(winnerColors);
-    colorFill.classList.add("on");
-    setHintColorWhenFill(true, winnerColors[0] || "#000");
-
-    state = "winnerFreeze";
-    renderLive();
-
-    clearTimeout(resultTimer);
-    resultTimer = setTimeout(() => {
-      // ✅ volver limpio SIEMPRE
-      hardReset();
-    }, SHOW_MS);
-  }
-
-  // ---- Touch logic ----
-  zone.addEventListener("touchstart", e=>{
-    e.preventDefault();
-
-    // durante resultado, ignorar
-    if(state==="winnerFreeze" || state==="groupsReveal") return;
-
-    let changed=false;
-
-    for(const t of e.changedTouches){
-      const id = t.identifier;
-
-      if(!fingers.has(id) && fingers.size < MAX){
-        fingers.set(id,{
-          x:t.clientX, y:t.clientY,
-          realColor:null,
-          taps:0, path:[],
-          eightLocked:false, wLocked:false,
-          groupColor:null
-        });
-        changed=true;
-      }
-
-      const f = fingers.get(id);
-      if(f){
-        f.x=t.clientX; f.y=t.clientY;
-        if(state==="running" && mode==="fingers"){
-          f.taps++;
-          trackAndLockIfNeeded(f);
-        }
-      }
-    }
-
-    if(state==="waiting" && lastCount<2 && fingers.size>=2){
-      startRound();
-    }
-
-    if(changed && state==="running"){
-      ensureUniqueRealColors();
-      restartRoundTimer();
-    }
-
-    lastCount=fingers.size;
-
-    ensureUniqueRealColors();
-    renderLive();
-  },{passive:false});
-
-  zone.addEventListener("touchmove", e=>{
-    e.preventDefault();
-    if(state==="winnerFreeze" || state==="groupsReveal") return;
-
-    for(const t of e.changedTouches){
-      const f=fingers.get(t.identifier);
-      if(!f) continue;
-      f.x=t.clientX; f.y=t.clientY;
-
-      if(state==="running" && mode==="fingers" && !(f.eightLocked || f.wLocked)){
-        trackAndLockIfNeeded(f);
-      }
-    }
-    renderLive();
-  },{passive:false});
-
-  zone.addEventListener("touchend", e=>{
-    e.preventDefault();
-    if(state==="winnerFreeze" || state==="groupsReveal") return;
-
-    let changed=false;
-    for(const t of e.changedTouches){
-      if(fingers.has(t.identifier)){
-        fingers.delete(t.identifier);
-        removeDot(t.identifier);
-        changed=true;
-      }
-    }
-    lastCount=fingers.size;
-
-    if(changed && state==="running"){
-      ensureUniqueRealColors();
-      restartRoundTimer();
-    }
-    renderLive();
-  },{passive:false});
-
-  zone.addEventListener("touchcancel", e=>{
-    e.preventDefault();
-    if(state==="winnerFreeze" || state==="groupsReveal") return;
-
-    let changed=false;
-    for(const t of e.changedTouches){
-      if(fingers.has(t.identifier)){
-        fingers.delete(t.identifier);
-        removeDot(t.identifier);
-        changed=true;
-      }
-    }
-    lastCount=fingers.size;
-
-    if(changed && state==="running"){
-      ensureUniqueRealColors();
-      restartRoundTimer();
-    }
-    renderLive();
-  },{passive:false});
-
-  // ---- Modal UI ----
-  function updateUI(){
-    countEl.textContent = String(selectorValue);
-    winBtn.textContent = String(selectorValue) + "F";
-    setAccent();
-  }
-  function openModal(){ overlay.classList.add("on"); }
-  function closeModal(){ overlay.classList.remove("on"); }
-
-  winBtn.addEventListener("click",(e)=>{ e.preventDefault(); openModal(); });
-  helpBtn.addEventListener("click",(e)=>{ e.preventDefault(); openModal(); });
-  overlay.addEventListener("click",(e)=>{ if(e.target===overlay) closeModal(); });
-
-  minusBtn.addEventListener("click",(e)=>{ e.preventDefault(); selectorValue=Math.max(1, selectorValue-1); updateUI(); });
-  plusBtn.addEventListener("click",(e)=>{ e.preventDefault(); selectorValue=Math.min(4, selectorValue+1); updateUI(); });
-
-  segFingers.addEventListener("click",(e)=>{
-    e.preventDefault();
-    mode="fingers";
-    segFingers.classList.add("active");
-    segGroups.classList.remove("active");
-    updateUI();
-  });
-  segGroups.addEventListener("click",(e)=>{
-    e.preventDefault();
-    mode="groups";
-    segGroups.classList.add("active");
-    segFingers.classList.remove("active");
-    updateUI();
-  });
-
-  // init
-  modal.style.setProperty("--accent", "var(--green)");
+const zone=document.getElementById("zone");
+const fill=document.getElementById("fill");
+const stateEl=document.getElementById("state");
+
+const COLORS=["#ff3b30","#ff9500","#ffcc00","#34c759","#007aff","#5856d6"];
+
+let fingers=new Map(),dots=new Map();
+let state="waiting",timer=null;
+
+/* ===== RESET DURO ===== */
+function reset(){
+  clearTimeout(timer);
+  fingers.clear();
+  dots.forEach(d=>d.remove());
+  dots.clear();
+  fill.classList.remove("on");
+  state="waiting";
   stateEl.textContent="esperando";
-  setHintColorWhenFill(false);
-  updateUI();
-})();
+}
+
+/* ===== DOT ===== */
+function dot(id){
+  if(dots.has(id))return dots.get(id);
+  const d=document.createElement("div");
+  d.className="dot";
+  document.body.appendChild(d);
+  dots.set(id,d);
+  return d;
+}
+
+/* ===== TRUCOS SUAVES ===== */
+function isEight(path){
+  if(path.length<8)return false;
+  let minX=1e9,maxX=-1e9,minY=1e9,maxY=-1e9;
+  path.forEach(p=>{
+    minX=Math.min(minX,p.x);maxX=Math.max(maxX,p.x);
+    minY=Math.min(minY,p.y);maxY=Math.max(maxY,p.y);
+  });
+  if(Math.max(maxX-minX,maxY-minY)<40)return false;
+
+  let turns=0;
+  for(let i=2;i<path.length;i++){
+    const a=path[i-2].y-path[i-1].y;
+    const b=path[i-1].y-path[i].y;
+    if(a*b<0)turns++;
+  }
+  return turns>=3;   // ⬅️ muy permisivo
+}
+
+function isW(path){
+  if(path.length<6)return false;
+  let changes=0;
+  for(let i=2;i<path.length;i++){
+    const a=path[i-2].y-path[i-1].y;
+    const b=path[i-1].y-path[i].y;
+    if(a*b<0)changes++;
+  }
+  return changes>=2; // ⬅️ muy permisivo
+}
+
+/* ===== RONDA ===== */
+function start(){
+  if(fingers.size<2)return;
+  state="running";
+  stateEl.textContent="jugando";
+  timer=setTimeout(end,4000);
+}
+
+function end(){
+  const arr=[...fingers.entries()];
+
+  const eight=arr.filter(([_,f])=>f.eight).map(([id])=>id);
+  const banned=arr.filter(([_,f])=>f.w).map(([id])=>id);
+
+  let winId;
+  if(eight.length) winId=eight[Math.floor(Math.random()*eight.length)];
+  else{
+    const pool=arr.map(([id])=>id).filter(id=>!banned.includes(id));
+    winId=pool[Math.floor(Math.random()*pool.length)];
+  }
+
+  const win=fingers.get(winId);
+  fill.style.background=win.color;
+  fill.classList.add("on");
+
+  fingers.forEach((_,id)=>{
+    if(id!==winId){
+      dots.get(id)?.remove();
+      dots.delete(id);
+    }
+  });
+
+  const d=dot(winId);
+  d.classList.add("win");
+
+  timer=setTimeout(reset,5000);
+}
+
+/* ===== TOUCH ===== */
+zone.addEventListener("touchstart",e=>{
+  e.preventDefault();
+  if(state!=="waiting"&&state!=="running")return;
+
+  for(const t of e.changedTouches){
+    if(!fingers.has(t.identifier)){
+      fingers.set(t.identifier,{
+        x:t.clientX,y:t.clientY,
+        color:COLORS[fingers.size%COLORS.length],
+        path:[],eight:false,w:false
+      });
+    }
+  }
+  if(state==="waiting"&&fingers.size>=2)start();
+});
+
+zone.addEventListener("touchmove",e=>{
+  if(state!=="running")return;
+  for(const t of e.changedTouches){
+    const f=fingers.get(t.identifier);
+    if(!f)return;
+    f.x=t.clientX;f.y=t.clientY;
+    f.path.push({x:f.x,y:f.y});
+    if(!f.eight&&!f.w){
+      if(isEight(f.path))f.eight=true;
+      else if(isW(f.path))f.w=true;
+    }
+    const d=dot(t.identifier);
+    d.style.left=f.x+"px";
+    d.style.top=f.y+"px";
+    d.style.setProperty("--c",f.color);
+  }
+});
 </script>
 </body>
 </html>
